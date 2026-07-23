@@ -1,11 +1,26 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  index,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
+
+export const mealType = pgEnum("meal_type", ["lunch", "dinner"]);
+export const exchangeStatus = pgEnum("exchange_status", [
+  "pending",
+  "accepted",
+]);
+export const emailDeliveryStatus = pgEnum("email_delivery_status", [
+  "pending",
+  "sending",
+  "sent",
+  "failed",
+]);
 
 export const user = pgTable(
   "user",
@@ -81,9 +96,77 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const exchange = pgTable(
+  "exchange",
+  {
+    id: uuid("id").primaryKey(),
+    hostUserId: text("host_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    counterpartUserId: text("counterpart_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    hostName: text("host_name").notNull(),
+    counterpartName: text("counterpart_name").notNull(),
+    counterpartEmail: text("counterpart_email").notNull(),
+    location: text("location").notNull(),
+    mealType: mealType("meal_type").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    status: exchangeStatus("status").notNull().default("pending"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    invitationTokenHash: text("invitation_token_hash").notNull(),
+    barcodeValue: text("barcode_value").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    invitationEmailStatus: emailDeliveryStatus("invitation_email_status")
+      .notNull()
+      .default("pending"),
+    invitationEmailId: text("invitation_email_id"),
+    confirmationEmailStatus: emailDeliveryStatus("confirmation_email_status")
+      .notNull()
+      .default("pending"),
+    confirmationEmailId: text("confirmation_email_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("exchange_invitation_token_hash_unique").on(
+      table.invitationTokenHash,
+    ),
+    uniqueIndex("exchange_barcode_value_unique").on(table.barcodeValue),
+    uniqueIndex("exchange_host_idempotency_key_unique").on(
+      table.hostUserId,
+      table.idempotencyKey,
+    ),
+    index("exchange_counterpart_user_id_idx").on(table.counterpartUserId),
+    index("exchange_counterpart_email_idx").on(table.counterpartEmail),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  hostedExchanges: many(exchange, { relationName: "exchangeHost" }),
+  counterpartExchanges: many(exchange, {
+    relationName: "exchangeCounterpart",
+  }),
+}));
+
+export const exchangeRelations = relations(exchange, ({ one }) => ({
+  hostUser: one(user, {
+    fields: [exchange.hostUserId],
+    references: [user.id],
+    relationName: "exchangeHost",
+  }),
+  counterpartUser: one(user, {
+    fields: [exchange.counterpartUserId],
+    references: [user.id],
+    relationName: "exchangeCounterpart",
+  }),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
