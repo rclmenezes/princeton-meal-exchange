@@ -90,6 +90,7 @@ export function ConfirmationEmail(details: ExchangeEmailDetails) {
       </Text>
       <ExchangeDetails {...details} />
       <Section style={barcodeCard}>
+        {/*details.barcodeImageSrc is for Test Email*/}
         <Img
           src={details.barcodeImageSrc ?? "cid:exchange-barcode"}
           alt={`Door barcode ${details.barcodeValue}`}
