@@ -189,4 +189,27 @@ describe("accept exchange API", () => {
     expect(update).not.toHaveBeenCalled();
     expect(deliverConfirmationEmail).not.toHaveBeenCalled();
   });
+
+  it("does not accept or resend a completed exchange", async () => {
+    getSession.mockResolvedValue({
+      user: { id: "invitee", email: "invitee@princeton.edu" },
+    });
+    getExchangeByToken.mockResolvedValue({
+      ...acceptedExchange,
+      status: "completed",
+      completedAt: new Date("2026-07-23T22:00:00.000Z"),
+    });
+
+    const response = await POST(
+      new Request("https://example.test/api/exchanges/token/accept", {
+        method: "POST",
+      }),
+      context,
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ status: "completed" });
+    expect(update).not.toHaveBeenCalled();
+    expect(deliverConfirmationEmail).not.toHaveBeenCalled();
+  });
 });

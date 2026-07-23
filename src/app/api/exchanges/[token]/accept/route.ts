@@ -51,6 +51,15 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 403 },
     );
   }
+  if (record.status === "completed") {
+    return NextResponse.json(
+      {
+        error: "This meal exchange has already been completed.",
+        status: "completed",
+      },
+      { status: 409 },
+    );
+  }
   if (isExchangeExpired(record.expiresAt)) {
     return NextResponse.json(
       { error: "This exchange invitation has expired." },

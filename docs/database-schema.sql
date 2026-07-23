@@ -19,7 +19,8 @@ CREATE TYPE meal_type AS ENUM (
 -- Current lifecycle state of an exchange.
 CREATE TYPE exchange_status AS ENUM (
   'pending',  -- The invited counterpart has not accepted yet.
-  'accepted'  -- The invited counterpart accepted the exchange.
+  'accepted', -- The invited counterpart accepted the exchange.
+  'completed' -- A checker validated and used the shared door pass.
 );
 
 -- Delivery state for each transactional email associated with an exchange.
@@ -167,6 +168,30 @@ COMMENT ON COLUMN verification.updated_at IS
 -- MEAL EXCHANGE TABLES
 -- ---------------------------------------------------------------------------
 
+-- One active phone-based checking session per checker.
+CREATE TABLE meal_check_session (
+  id uuid PRIMARY KEY,
+  checker_user_id text NOT NULL REFERENCES "user" (id) ON DELETE RESTRICT,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  ended_at timestamptz
+);
+
+COMMENT ON COLUMN meal_check_session.id IS
+  'Application-generated UUID identifying the checking session.';
+COMMENT ON COLUMN meal_check_session.checker_user_id IS
+  'Authenticated user who started the session. Flow 5 will require this user to be an establishment admin.';
+COMMENT ON COLUMN meal_check_session.started_at IS
+  'Timestamp when the checker opened or resumed meal checking.';
+COMMENT ON COLUMN meal_check_session.ended_at IS
+  'Timestamp when the checker ended the session. Null while active.';
+
+CREATE INDEX meal_check_session_checker_user_id_idx
+  ON meal_check_session (checker_user_id);
+
+CREATE UNIQUE INDEX meal_check_session_one_active_per_checker_unique
+  ON meal_check_session (checker_user_id)
+  WHERE ended_at IS NULL;
+
 -- One invitation and eventual shared door pass between a host and counterpart.
 CREATE TABLE exchange (
   id uuid PRIMARY KEY,
@@ -180,6 +205,8 @@ CREATE TABLE exchange (
   expires_at timestamptz NOT NULL,
   status exchange_status NOT NULL DEFAULT 'pending',
   accepted_at timestamptz,
+  completed_at timestamptz,
+  meal_check_session_id uuid REFERENCES meal_check_session (id) ON DELETE SET NULL,
   invitation_token_hash text NOT NULL,
   barcode_value text NOT NULL,
   idempotency_key text NOT NULL,
@@ -211,9 +238,13 @@ COMMENT ON COLUMN exchange.meal_type IS
 COMMENT ON COLUMN exchange.expires_at IS
   'Deadline for accepting or using the exchange. Expired exchanges cannot be accepted and their door code is hidden.';
 COMMENT ON COLUMN exchange.status IS
-  'Lifecycle state: pending before acceptance, accepted afterward.';
+  'Lifecycle state: pending before acceptance, accepted while the door pass is active, and completed after check-in.';
 COMMENT ON COLUMN exchange.accepted_at IS
   'Timestamp when the counterpart accepted. Null while status is pending.';
+COMMENT ON COLUMN exchange.completed_at IS
+  'Timestamp when a checker successfully validated the pass and completed the exchange.';
+COMMENT ON COLUMN exchange.meal_check_session_id IS
+  'Checking session that completed the exchange. Set to null if the session is removed.';
 COMMENT ON COLUMN exchange.invitation_token_hash IS
   'SHA-256 hash of the opaque token in the private invitation URL. The raw URL token is never stored.';
 COMMENT ON COLUMN exchange.barcode_value IS
@@ -249,6 +280,9 @@ CREATE INDEX exchange_counterpart_user_id_idx
 
 CREATE INDEX exchange_counterpart_email_idx
   ON exchange (counterpart_email);
+
+CREATE INDEX exchange_meal_check_session_id_idx
+  ON exchange (meal_check_session_id);
 
 /*
  * Relationship summary

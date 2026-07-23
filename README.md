@@ -43,6 +43,31 @@ adds and backfills `host_user_id` (or it must remove disposable development
 rows) before enforcing `NOT NULL`. The old schema did not retain enough
 information to infer the correct host safely.
 
+## Meal Checking
+
+Authenticated users can open `/meal-checking` from the signed-in home page. The
+page starts or resumes one active checking session, scans the shared Code 128
+barcode with the device camera, and also accepts the printed
+`ME-XXXX-XXXX-XXXX` door code.
+
+`POST /api/meal-checking/check-ins` validates that the exchange is accepted and
+that its `expiresAt` calendar date is today in `America/New_York`. A successful
+check-in atomically changes the status to `completed`, records the completion
+time and checking session, and returns the guest name and meal type. Used
+barcodes are hidden from the exchange page and cannot be accepted or emailed
+again.
+
+Camera access requires a secure context in deployed environments. It works on
+`localhost` during development; otherwise use HTTPS.
+
+> **Flow 5 integration note:** Meal-checking pages and endpoints currently
+> require any authenticated user. Before production release, replace this
+> temporary guard with an admin-role check and verify that the exchange belongs
+> to the admin's establishment.
+
+Migration `0004_gorgeous_human_cannonball.sql` adds the completed exchange
+state, meal-checking sessions, and completion audit fields.
+
 ## Getting Started
 
 ```bash

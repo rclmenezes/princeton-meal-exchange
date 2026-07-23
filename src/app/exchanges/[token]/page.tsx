@@ -145,7 +145,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
           <p className="eyebrow">Different account</p>
           <h1>This invitation isn’t for {session?.user.email}.</h1>
           <p className="muted measure">
-            {record.status === "accepted"
+            {record.status !== "pending"
               ? "This exchange is linked to the account that accepted it. Sign in with that same account."
               : `Sign out, then use the Princeton account at ${maskEmail(record.counterpartEmail)}.`}
           </p>
@@ -155,8 +155,9 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
     );
   }
 
+  const completed = record.status === "completed";
   const accepted = record.status === "accepted";
-  const expired = isExchangeExpired(record.expiresAt);
+  const expired = !completed && isExchangeExpired(record.expiresAt);
   const emailFailed = record.confirmationEmailStatus === "failed";
   const barcodeSvg =
     accepted && !expired ? createBarcodeSvg(record.barcodeValue) : null;
@@ -173,23 +174,29 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
         <p className="eyebrow">
           {expired
             ? "Expired invitation"
-            : accepted
-              ? "Door pass"
-              : "Meal invitation"}
+            : completed
+              ? "Meal completed"
+              : accepted
+                ? "Door pass"
+                : "Meal invitation"}
         </p>
         <h1>
           {expired
             ? "This exchange has expired."
-            : accepted
-              ? "Your exchange is confirmed."
-              : `${record.hostName} invited you to a meal.`}
+            : completed
+              ? "This meal has been checked in."
+              : accepted
+                ? "Your exchange is confirmed."
+                : `${record.hostName} invited you to a meal.`}
         </h1>
         <p className="exchange-lead">
           {expired
             ? "The door code is no longer active. Ask the host to create a new exchange."
-            : accepted
-              ? `You’re all set, ${record.counterpartName}. Keep this pass ready for the door.`
-              : `${record.counterpartName}, review the details below and accept when you’re ready.`}
+            : completed
+              ? `${record.counterpartName}’s door pass has been used successfully.`
+              : accepted
+                ? `You’re all set, ${record.counterpartName}. Keep this pass ready for the door.`
+                : `${record.counterpartName}, review the details below and accept when you’re ready.`}
         </p>
       </div>
 
@@ -202,7 +209,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
             </h2>
           </div>
           <span
-            className={`status-tag ${expired ? "status-bad" : accepted ? "status-ok" : "status-warn"}`}
+            className={`status-tag ${expired ? "status-bad" : completed || accepted ? "status-ok" : "status-warn"}`}
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               {expired ? (
@@ -221,7 +228,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
                     strokeLinecap="round"
                   />
                 </>
-              ) : accepted ? (
+              ) : completed || accepted ? (
                 <path
                   d="M5 12.5l4.5 4.5L19 7.5"
                   stroke="currentColor"
@@ -248,7 +255,13 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
                 </>
               )}
             </svg>
-            {expired ? "Expired" : accepted ? "Accepted" : "Awaiting response"}
+            {expired
+              ? "Expired"
+              : completed
+                ? "Completed"
+                : accepted
+                  ? "Accepted"
+                  : "Awaiting response"}
           </span>
         </div>
 
@@ -273,6 +286,12 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
             <dt>Expires</dt>
             <dd>{dateFormatter.format(record.expiresAt)}</dd>
           </div>
+          {completed && record.completedAt ? (
+            <div>
+              <dt>Checked in</dt>
+              <dd>{dateFormatter.format(record.completedAt)}</dd>
+            </div>
+          ) : null}
         </dl>
 
         {accepted && barcodeSvg ? (
@@ -292,7 +311,30 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
           </div>
         ) : null}
 
-        {expired ? (
+        {completed ? (
+          <div className="notice notice-ok" role="status">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              />
+              <path
+                d="M8 12.3l2.6 2.6L16 9.5"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <div>
+              <strong>Meal checked in</strong>
+              <span>This door pass has been used and is no longer active.</span>
+            </div>
+          </div>
+        ) : expired ? (
           <div className="notice notice-error" role="status">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle
@@ -373,7 +415,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
           </p>
         )}
 
-        {!expired ? (
+        {!expired && !completed ? (
           <ExchangeAction
             token={token}
             accepted={accepted}

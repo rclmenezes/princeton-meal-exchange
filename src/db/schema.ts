@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -14,6 +14,7 @@ export const mealType = pgEnum("meal_type", ["lunch", "dinner"]);
 export const exchangeStatus = pgEnum("exchange_status", [
   "pending",
   "accepted",
+  "completed",
 ]);
 export const emailDeliveryStatus = pgEnum("email_delivery_status", [
   "pending",
@@ -96,6 +97,26 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const mealCheckSession = pgTable(
+  "meal_check_session",
+  {
+    id: uuid("id").primaryKey(),
+    checkerUserId: text("checker_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("meal_check_session_checker_user_id_idx").on(table.checkerUserId),
+    uniqueIndex("meal_check_session_one_active_per_checker_unique")
+      .on(table.checkerUserId)
+      .where(sql`${table.endedAt} is null`),
+  ],
+);
+
 export const exchange = pgTable(
   "exchange",
   {
@@ -114,6 +135,11 @@ export const exchange = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     status: exchangeStatus("status").notNull().default("pending"),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    mealCheckSessionId: uuid("meal_check_session_id").references(
+      () => mealCheckSession.id,
+      { onDelete: "set null" },
+    ),
     invitationTokenHash: text("invitation_token_hash").notNull(),
     barcodeValue: text("barcode_value").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -144,6 +170,7 @@ export const exchange = pgTable(
     ),
     index("exchange_counterpart_user_id_idx").on(table.counterpartUserId),
     index("exchange_counterpart_email_idx").on(table.counterpartEmail),
+    index("exchange_meal_check_session_id_idx").on(table.mealCheckSessionId),
   ],
 );
 
@@ -154,6 +181,7 @@ export const userRelations = relations(user, ({ many }) => ({
   counterpartExchanges: many(exchange, {
     relationName: "exchangeCounterpart",
   }),
+  mealCheckSessions: many(mealCheckSession),
 }));
 
 export const exchangeRelations = relations(exchange, ({ one }) => ({
@@ -167,7 +195,22 @@ export const exchangeRelations = relations(exchange, ({ one }) => ({
     references: [user.id],
     relationName: "exchangeCounterpart",
   }),
+  mealCheckSession: one(mealCheckSession, {
+    fields: [exchange.mealCheckSessionId],
+    references: [mealCheckSession.id],
+  }),
 }));
+
+export const mealCheckSessionRelations = relations(
+  mealCheckSession,
+  ({ one, many }) => ({
+    checkerUser: one(user, {
+      fields: [mealCheckSession.checkerUserId],
+      references: [user.id],
+    }),
+    exchanges: many(exchange),
+  }),
+);
 
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, {

@@ -1,4 +1,4 @@
-import { AuthButton } from "@/components/auth-button";
+import { HomeActions } from "@/components/home-actions";
 
 export default function Home() {
   return (
@@ -10,7 +10,7 @@ export default function Home() {
           </p>
           <h1 className="text-2xl font-semibold">Meal Exchange</h1>
         </div>
-        <AuthButton />
+        <HomeActions />
       </nav>
 
       <section className="grid flex-1 place-items-center py-16">

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -19,6 +19,8 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@types/ws": "^8.18.1",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "better-auth": "^1.6.11",
     "bwip-js": "^4.11.2",
     "dotenv": "^17.4.2",
