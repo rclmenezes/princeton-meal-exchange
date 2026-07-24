@@ -3,30 +3,40 @@ import { ExchangeForm } from "@/components/exchange-form";
 import { db } from "@/db";
 import { establishment, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import {
+  DEMO_LOCATIONS,
+  DEMO_USER,
+  isDevelopmentDemoMode,
+} from "@/lib/demo-data";
 import { asc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const demoMode = isDevelopmentDemoMode();
+  const session = demoMode
+    ? { user: DEMO_USER }
+    : await auth.api.getSession({ headers: await headers() });
   const [locations, profiles] = session
-    ? await Promise.all([
-        db
-          .select({
-            id: establishment.id,
-            name: establishment.name,
-            type: establishment.type,
-          })
-          .from(establishment)
-          .where(eq(establishment.isActive, true))
-          .orderBy(asc(establishment.type), asc(establishment.name)),
-        db
-          .select({ eligible: user.isExchangeEligible })
-          .from(user)
-          .where(eq(user.id, session.user.id))
-          .limit(1),
-      ])
+    ? demoMode
+      ? [DEMO_LOCATIONS, [{ eligible: true }]]
+      : await Promise.all([
+          db
+            .select({
+              id: establishment.id,
+              name: establishment.name,
+              type: establishment.type,
+            })
+            .from(establishment)
+            .where(eq(establishment.isActive, true))
+            .orderBy(asc(establishment.type), asc(establishment.name)),
+          db
+            .select({ eligible: user.isExchangeEligible })
+            .from(user)
+            .where(eq(user.id, session.user.id))
+            .limit(1),
+        ])
     : [[], []];
 
   return (
@@ -44,7 +54,11 @@ export default async function Home() {
             <span>Princeton Dining</span>
           </span>
         </span>
-        <AuthButton className="button button-secondary" />
+        {demoMode ? (
+          <span className="flow1-badge flow1-badge-ok">Local demo</span>
+        ) : (
+          <AuthButton className="button button-secondary" />
+        )}
       </header>
 
       <div className="home-content" id="home-content">

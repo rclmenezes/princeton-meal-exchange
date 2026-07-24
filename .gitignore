@@ -12,6 +12,7 @@ tsconfig.tsbuildinfo
 # misc
 .DS_Store
 *.pem
+.local-logs/
 
 # debug
 npm-debug.log*

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { user } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { DEMO_STUDENTS, isDevelopmentDemoMode } from "@/lib/demo-data";
 import { searchGraphUsers } from "@/lib/graph";
 import { and, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,6 +9,29 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
+  if (query.length < 2) return NextResponse.json({ students: [] });
+
+  if (isDevelopmentDemoMode()) {
+    const normalized = query.toLowerCase();
+    return NextResponse.json({
+      students: DEMO_STUDENTS.filter(
+        (student) =>
+          student.name.toLowerCase().includes(normalized) ||
+          student.email.toLowerCase().includes(normalized),
+      ).map((student) => ({
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        eligible: student.eligible,
+        eligibilityMessage: student.eligible
+          ? "Eligible for meal exchange"
+          : "Not eligible for meal exchange",
+      })),
+      source: "local-demo",
+    });
+  }
+
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) {
     return NextResponse.json(
@@ -15,9 +39,6 @@ export async function GET(request: NextRequest) {
       { status: 401 },
     );
   }
-
-  const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
-  if (query.length < 2) return NextResponse.json({ students: [] });
 
   try {
     const graphUsers = await searchGraphUsers(query);

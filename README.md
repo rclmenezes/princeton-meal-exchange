@@ -67,6 +67,19 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Zero-command local demo
+
+Set `DEV_DEMO_MODE="true"` in `.env.local` to run Flow 1 without Docker,
+Postgres, TigerNet, Graph, or Resend. Demo mode is always disabled when
+`NODE_ENV=production`. It supplies a local signed-in student, searchable
+eligibility fixtures, and host locations; submission runs the normal input and
+host-location validation but does not persist data or send email.
+
+`scripts/start-local.ps1` starts the development server in the background and
+does nothing when port 3000 is already listening. It can be invoked from a
+Windows Startup shortcut so the local demo is available immediately after
+sign-in.
+
 ## Email previews
 
 Preview the invitation and confirmation templates without sending email:

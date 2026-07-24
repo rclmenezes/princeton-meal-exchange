@@ -17,7 +17,11 @@ type Location = {
   type: "dining_hall" | "eating_club";
 };
 
-export function ExchangeForm({ locations }: { locations: Location[] }) {
+export function ExchangeForm({
+  locations,
+}: {
+  locations: readonly Location[];
+}) {
   const searchId = useId();
   const listboxId = useId();
   const [query, setQuery] = useState("");
@@ -35,6 +39,7 @@ export function ExchangeForm({ locations }: { locations: Location[] }) {
     locationName: string;
     mealType: string;
     date: string;
+    demo?: boolean;
   } | null>(null);
   const searchRequest = useRef<AbortController | null>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
@@ -104,13 +109,14 @@ export function ExchangeForm({ locations }: { locations: Location[] }) {
           mealType: string;
           date: string;
         };
+        demo?: boolean;
         error?: string;
       };
       if (!response.ok || !body.exchange) {
         throw new Error(body.error ?? "The exchange could not be created.");
       }
 
-      setSuccess(body.exchange);
+      setSuccess({ ...body.exchange, demo: body.demo });
       setQuery("");
       setSelected(null);
       setDate("");
@@ -142,7 +148,12 @@ export function ExchangeForm({ locations }: { locations: Location[] }) {
         <div className="flow1-success" role="status">
           <span aria-hidden="true">✓</span>
           <div>
-            <strong>Invitation sent to {success.counterpartName}</strong>
+            <strong>
+              {success.demo
+                ? "Demo invitation created for"
+                : "Invitation sent to"}{" "}
+              {success.counterpartName}
+            </strong>
             <p>
               {success.mealType === "lunch" ? "Lunch" : "Dinner"} at{" "}
               {success.locationName} on{" "}
@@ -150,7 +161,7 @@ export function ExchangeForm({ locations }: { locations: Location[] }) {
                 dateStyle: "long",
                 timeZone: "UTC",
               }).format(new Date(`${success.date}T12:00:00Z`))}
-              .
+              .{success.demo ? " No email is sent in local demo mode." : ""}
             </p>
           </div>
         </div>

@@ -11,6 +11,7 @@ import {
   normalizeEmail,
   validateCreateExchangeInput,
 } from "./exchange";
+import { isDevelopmentDemoMode } from "./demo-data";
 
 const validInput = {
   counterpartId: "student-2",
@@ -68,6 +69,12 @@ describe("exchange input", () => {
     expect(isDevelopmentAuthBypassEnabled("test", "true")).toBe(true);
     expect(isDevelopmentAuthBypassEnabled("production", "true")).toBe(false);
     expect(isDevelopmentAuthBypassEnabled("development", "false")).toBe(false);
+  });
+
+  it("allows demo mode only outside production", () => {
+    expect(isDevelopmentDemoMode("development", "true")).toBe(true);
+    expect(isDevelopmentDemoMode("production", "true")).toBe(false);
+    expect(isDevelopmentDemoMode("development", "false")).toBe(false);
   });
 
   it("determines expiration against an explicit clock", () => {

@@ -3,6 +3,12 @@ import { db } from "@/db";
 import { establishment, exchange, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import {
+  DEMO_LOCATIONS,
+  DEMO_STUDENTS,
+  DEMO_USER,
+  isDevelopmentDemoMode,
+} from "@/lib/demo-data";
+import {
   createBarcodeValue,
   deriveInvitationToken,
   fingerprintExchangeInput,
@@ -21,7 +27,10 @@ import { and, count, eq, inArray, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const demoMode = isDevelopmentDemoMode();
+  const session = demoMode
+    ? { user: DEMO_USER }
+    : await auth.api.getSession({ headers: request.headers });
   if (!session) {
     return NextResponse.json(
       { error: "Sign in before creating an exchange." },
@@ -52,6 +61,57 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Choose another student as your counterpart." },
       { status: 400 },
+    );
+  }
+
+  if (demoMode) {
+    const counterpart = DEMO_STUDENTS.find(
+      (student) => student.id === validation.data.counterpartId,
+    );
+    const location = DEMO_LOCATIONS.find(
+      (candidate) => candidate.id === validation.data.establishmentId,
+    );
+    if (!counterpart || !location) {
+      return NextResponse.json(
+        { error: "Choose a student and location from the demo data." },
+        { status: 422 },
+      );
+    }
+    if (!counterpart.eligible) {
+      return NextResponse.json(
+        {
+          error: `${counterpart.name} is not eligible under the latest meal-plan roster.`,
+        },
+        { status: 422 },
+      );
+    }
+    if (
+      location.type === "eating_club" &&
+      counterpart.homeEstablishmentId !== location.id
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "For this demo, choose the eating club that belongs to the selected student.",
+        },
+        { status: 422 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        id: randomUUID(),
+        status: "pending",
+        invitationEmailStatus: "skipped-demo",
+        demo: true,
+        exchange: {
+          counterpartName: counterpart.name,
+          locationName: location.name,
+          mealType: validation.data.mealType,
+          date: validation.data.date,
+        },
+      },
+      { status: 201 },
     );
   }
 
