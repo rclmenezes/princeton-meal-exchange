@@ -23,6 +23,7 @@ export type ExchangeEmailDetails = {
   hostName: string;
   location: string;
   mealType: MealType;
+  exchangeDate: string;
   expiresAt: Date;
   detailUrl: string;
   barcodeValue?: string;
@@ -33,6 +34,10 @@ const formatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "full",
   timeStyle: "short",
   timeZone: "America/New_York",
+});
+const mealDateFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "full",
+  timeZone: "UTC",
 });
 
 export async function createInvitationEmail(details: ExchangeEmailDetails) {
@@ -163,9 +168,15 @@ function EmailLayout({
 function ExchangeDetails(details: ExchangeEmailDetails) {
   return (
     <Section style={detailsCard}>
-      <DetailRow label="Host" value={details.hostName} />
+      <DetailRow label="Inviter" value={details.hostName} />
       <DetailRow label="Where" value={details.location} />
       <DetailRow label="Meal" value={titleCase(details.mealType)} />
+      <DetailRow
+        label="Date"
+        value={mealDateFormatter.format(
+          new Date(`${details.exchangeDate}T12:00:00Z`),
+        )}
+      />
       <DetailRow
         label="Expires"
         value={formatter.format(details.expiresAt)}

@@ -9,6 +9,7 @@ const details = {
   hostName: "Maya Hernandez",
   location: "Cottage & Club",
   mealType: "dinner" as const,
+  exchangeDate: "2030-05-10",
   expiresAt: new Date("2030-05-12T23:00:00.000Z"),
   detailUrl: "https://example.test/exchanges/token",
   barcodeValue: "ME-ABCD-EFGH-JKLM",

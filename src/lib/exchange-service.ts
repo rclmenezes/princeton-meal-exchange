@@ -52,6 +52,7 @@ export async function deliverInvitationEmail(
     hostName: record.hostName,
     location: record.location,
     mealType: record.mealType,
+    exchangeDate: record.exchangeDate,
     expiresAt: record.expiresAt,
     detailUrl,
   });
@@ -109,6 +110,7 @@ export async function deliverConfirmationEmail(
     hostName: record.hostName,
     location: record.location,
     mealType: record.mealType,
+    exchangeDate: record.exchangeDate,
     expiresAt: record.expiresAt,
     detailUrl,
     barcodeValue: record.barcodeValue,

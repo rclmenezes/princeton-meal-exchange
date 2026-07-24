@@ -11,7 +11,7 @@ type AuthButtonProps = {
 export function AuthButton({
   callbackURL = "/",
   className,
-  signInLabel = "Sign in with Google",
+  signInLabel = "Sign in with TigerNet",
 }: AuthButtonProps = {}) {
   const { data: session, isPending } = authClient.useSession();
 
@@ -52,9 +52,10 @@ export function AuthButton({
         "rounded-md bg-black px-4 py-2 text-sm font-medium text-white"
       }
       onClick={() =>
-        void authClient.signIn.social({
-          provider: "google",
+        void authClient.signIn.oauth2({
+          providerId: "tigernet",
           callbackURL,
+          errorCallbackURL: "/?authError=1",
         })
       }
       type="button"

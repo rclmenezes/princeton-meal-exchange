@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/email";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { genericOAuth } from "better-auth/plugins";
 
 const authSecret = process.env.BETTER_AUTH_SECRET;
 
@@ -22,12 +23,16 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
-  socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    },
-  },
+  ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ? {
+        socialProviders: {
+          google: {
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          },
+        },
+      }
+    : {}),
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
       void sendEmail({
@@ -37,5 +42,24 @@ export const auth = betterAuth({
       });
     },
   },
-  plugins: [nextCookies()],
+  plugins: [
+    ...(process.env.TIGERNET_CLIENT_ID &&
+    process.env.TIGERNET_CLIENT_SECRET &&
+    process.env.TIGERNET_DISCOVERY_URL
+      ? [
+          genericOAuth({
+            config: [
+              {
+                providerId: "tigernet",
+                clientId: process.env.TIGERNET_CLIENT_ID,
+                clientSecret: process.env.TIGERNET_CLIENT_SECRET,
+                discoveryUrl: process.env.TIGERNET_DISCOVERY_URL,
+                scopes: ["openid", "profile", "email"],
+              },
+            ],
+          }),
+        ]
+      : []),
+    nextCookies(),
+  ],
 });

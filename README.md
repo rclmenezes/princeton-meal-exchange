@@ -5,20 +5,34 @@ A Next.js TypeScript app configured for Tailwind CSS, Better Auth with Google OA
 The complete database structure and a description of every column are in
 [`docs/database-schema.sql`](docs/database-schema.sql).
 
+## Flow 1: initiating an exchange
+
+The home page implements the complete initiator flow:
+
+1. Sign in through TigerNet OIDC.
+2. Search Microsoft Graph by student name. Results are joined to the latest
+   eligibility roster and ineligible or missing students cannot be selected.
+3. Choose lunch or dinner, the meal date, and an active host location.
+4. Submit. The server reloads and validates both participants and the location,
+   derives the meal host/guest, enforces the 10-open-exchange cap, prevents
+   duplicates, saves the invitation, and sends Alvin's Resend invitation.
+
+In development, Graph search falls back to eligible users in the local database
+when Graph credentials are absent.
+
 ## Exchange API
 
 Create an invitation with `POST /api/exchanges`. The client supplies a unique
 `Idempotency-Key` header and a JSON body. The request must include a valid
-Better Auth session; the host ID and display-name snapshot come from that
-session rather than from client input.
+Better Auth session. Names, emails, eligibility, location, and host/guest roles
+are resolved on the server rather than accepted from client input.
 
 ```json
 {
-  "counterpartName": "Julian Park",
-  "counterpartEmail": "julian@princeton.edu",
-  "location": "Cottage Club",
+  "counterpartId": "student-user-id",
+  "establishmentId": "3ec6de13-73b7-4baa-8497-dce75c34f908",
   "mealType": "dinner",
-  "expiresAt": "2030-05-12T23:00:00.000Z"
+  "date": "2030-05-12"
 }
 ```
 
@@ -71,13 +85,25 @@ Set the values in `.env.local`, then mirror them in Vercel:
 - `DATABASE_URL`: Neon Postgres connection string
 - `BETTER_AUTH_SECRET`: long random secret for Better Auth
 - `BETTER_AUTH_URL`: app URL, for example `http://localhost:3000`
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: Google OAuth web credentials
+- `TIGERNET_CLIENT_ID` / `TIGERNET_CLIENT_SECRET`: OIT-issued OIDC credentials
+- `TIGERNET_DISCOVERY_URL`: TigerNet OIDC discovery document URL
+- `GRAPH_TENANT_ID` / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET`: server-only
+  Microsoft Graph application credentials with directory-read permission
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: optional local OAuth credentials
 - `RESEND_API_KEY` / `RESEND_FROM_EMAIL`: Resend transactional email settings
 
-For Google OAuth, add these redirect URIs in Google Cloud:
+Register these TigerNet callback URLs:
 
-- Local: `http://localhost:3000/api/auth/callback/google`
-- Production: `https://your-domain.com/api/auth/callback/google`
+- Local: `http://localhost:3000/api/auth/oauth2/callback/tigernet`
+- Production: `https://meal.exchange/api/auth/oauth2/callback/tigernet`
+
+## Eligibility roster contract
+
+The nightly roster process owns `student_id`, `graph_id`, `plan_code`,
+`is_exchange_eligible`, `class_year`, `home_establishment_id`, and
+`eligibility_updated_at` on `user`. Flow 1 does not infer eligibility from
+Graph or hard-code plan names; both participants must have
+`is_exchange_eligible = true` when the invitation is submitted.
 
 ## Useful Scripts
 

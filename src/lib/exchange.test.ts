@@ -13,11 +13,10 @@ import {
 } from "./exchange";
 
 const validInput = {
-  counterpartName: "Julian Park",
-  counterpartEmail: " JULIAN@Princeton.edu ",
-  location: "Cottage Club",
+  counterpartId: "student-2",
+  establishmentId: "3ec6de13-73b7-4baa-8497-dce75c34f908",
   mealType: "dinner",
-  expiresAt: "2030-05-12T23:00:00.000Z",
+  date: "2030-05-12",
 };
 
 describe("exchange input", () => {
@@ -88,10 +87,8 @@ describe("exchange input", () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.counterpartEmail).toBe("julian@princeton.edu");
-      expect(result.data.expiresAt).toEqual(
-        new Date("2030-05-12T23:00:00.000Z"),
-      );
+      expect(result.data.counterpartId).toBe("student-2");
+      expect(result.data.date).toBe("2030-05-12");
     }
   });
 
@@ -103,8 +100,11 @@ describe("exchange input", () => {
       validateCreateExchangeInput({ ...validInput, mealType: "breakfast" }),
     ).toEqual({ ok: false, error: "Meal type must be lunch or dinner." });
     expect(
-      validateCreateExchangeInput({ ...validInput, counterpartEmail: "nope" }),
-    ).toEqual({ ok: false, error: "A valid counterpart email is required." });
+      validateCreateExchangeInput({ ...validInput, counterpartId: "" }),
+    ).toEqual({
+      ok: false,
+      error: "Choose a student from the search results.",
+    });
   });
 
   it("creates a stable request fingerprint", () => {
@@ -113,7 +113,7 @@ describe("exchange input", () => {
       new Date("2029-01-01"),
     );
     const second = validateCreateExchangeInput(
-      { ...validInput, counterpartEmail: "julian@princeton.edu" },
+      { ...validInput },
       new Date("2029-01-01"),
     );
     if (!first.ok || !second.ok) throw new Error("Fixture should be valid");

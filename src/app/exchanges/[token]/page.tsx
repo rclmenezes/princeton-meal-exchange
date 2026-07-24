@@ -27,6 +27,10 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   timeZoneName: "short",
 });
+const mealDateFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "full",
+  timeZone: "UTC",
+});
 
 export default async function ExchangePage({ params }: ExchangePageProps) {
   const { token } = await params;
@@ -160,6 +164,14 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
   const emailFailed = record.confirmationEmailStatus === "failed";
   const barcodeSvg =
     accepted && !expired ? createBarcodeSvg(record.barcodeValue) : null;
+  const mealHostName =
+    record.mealHostUserId === record.hostUserId
+      ? record.hostName
+      : record.counterpartName;
+  const mealGuestName =
+    record.mealGuestUserId === record.hostUserId
+      ? record.hostName
+      : record.counterpartName;
 
   return (
     <ExchangeShell>
@@ -255,11 +267,11 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
         <dl className="detail-list">
           <div>
             <dt>Host</dt>
-            <dd>{record.hostName}</dd>
+            <dd>{mealHostName}</dd>
           </div>
           <div>
             <dt>Guest</dt>
-            <dd>{record.counterpartName}</dd>
+            <dd>{mealGuestName}</dd>
           </div>
           <div>
             <dt>Where</dt>
@@ -268,6 +280,14 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
           <div>
             <dt>Meal</dt>
             <dd>{capitalize(record.mealType)}</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>
+              {mealDateFormatter.format(
+                new Date(`${record.exchangeDate}T12:00:00Z`),
+              )}
+            </dd>
           </div>
           <div>
             <dt>Expires</dt>

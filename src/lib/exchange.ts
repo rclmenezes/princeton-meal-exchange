@@ -1,24 +1,19 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 
 export const MEAL_TYPES = ["lunch", "dinner"] as const;
+export const MAX_OPEN_EXCHANGES = 10;
+export const ACCEPTANCE_WINDOW_DAYS = 7;
 export type MealType = (typeof MEAL_TYPES)[number];
 
 export type CreateExchangeInput = {
-  counterpartName: string;
-  counterpartEmail: string;
-  location: string;
+  counterpartId: string;
+  establishmentId: string;
   mealType: MealType;
-  expiresAt: string;
+  date: string;
 };
 
-export type ValidatedCreateExchangeInput = Omit<
-  CreateExchangeInput,
-  "expiresAt"
-> & {
-  expiresAt: Date;
-};
+export type ValidatedCreateExchangeInput = CreateExchangeInput;
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const BARCODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 
 export function normalizeEmail(email: string) {
@@ -68,49 +63,31 @@ export function validateCreateExchangeInput(
   }
 
   const input = value as Record<string, unknown>;
-  const counterpartName = cleanBoundedText(input.counterpartName, 120);
-  const counterpartEmail =
-    typeof input.counterpartEmail === "string"
-      ? normalizeEmail(input.counterpartEmail)
-      : "";
-  const location = cleanBoundedText(input.location, 160);
+  const counterpartId = cleanBoundedText(input.counterpartId, 200);
+  const establishmentId = cleanBoundedText(input.establishmentId, 200);
   const meal = input.mealType;
-  const expiresAt =
-    typeof input.expiresAt === "string" ? new Date(input.expiresAt) : null;
+  const date = typeof input.date === "string" ? input.date : "";
 
-  if (!counterpartName) {
-    return {
-      ok: false,
-      error: "Counterpart name must be between 1 and 120 characters.",
-    };
-  }
-  if (!EMAIL_PATTERN.test(counterpartEmail) || counterpartEmail.length > 320) {
-    return { ok: false, error: "A valid counterpart email is required." };
-  }
-  if (!location) {
-    return {
-      ok: false,
-      error: "Location must be between 1 and 160 characters.",
-    };
-  }
+  if (!counterpartId)
+    return { ok: false, error: "Choose a student from the search results." };
+  if (!establishmentId) return { ok: false, error: "Choose a host location." };
   if (meal !== "lunch" && meal !== "dinner") {
     return { ok: false, error: "Meal type must be lunch or dinner." };
   }
-  if (!expiresAt || Number.isNaN(expiresAt.getTime())) {
-    return { ok: false, error: "A valid ISO expiration date is required." };
+  if (!isIsoDate(date)) {
+    return { ok: false, error: "Choose a valid exchange date." };
   }
-  if (expiresAt.getTime() <= now.getTime()) {
-    return { ok: false, error: "The expiration date must be in the future." };
+  if (date < princetonDateString(now)) {
+    return { ok: false, error: "The exchange date cannot be in the past." };
   }
 
   return {
     ok: true,
     data: {
-      counterpartName,
-      counterpartEmail,
-      location,
+      counterpartId,
+      establishmentId,
       mealType: meal,
-      expiresAt,
+      date,
     },
   };
 }
@@ -119,14 +96,41 @@ export function fingerprintExchangeInput(input: ValidatedCreateExchangeInput) {
   return createHash("sha256")
     .update(
       JSON.stringify({
-        counterpartName: input.counterpartName,
-        counterpartEmail: input.counterpartEmail,
-        location: input.location,
+        counterpartId: input.counterpartId,
+        establishmentId: input.establishmentId,
         mealType: input.mealType,
-        expiresAt: input.expiresAt.toISOString(),
+        date: input.date,
       }),
     )
     .digest("hex");
+}
+
+export function invitationExpiry(now = new Date()) {
+  const expiresAt = new Date(now);
+  expiresAt.setDate(expiresAt.getDate() + ACCEPTANCE_WINDOW_DAYS);
+  return expiresAt;
+}
+
+export function princetonDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function isIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
 }
 
 export function deriveInvitationToken(exchangeId: string, secret: string) {

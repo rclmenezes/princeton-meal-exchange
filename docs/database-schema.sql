@@ -30,6 +30,11 @@ CREATE TYPE email_delivery_status AS ENUM (
   'failed'    -- The last delivery attempt failed and may be retried.
 );
 
+CREATE TYPE establishment_type AS ENUM (
+  'dining_hall',
+  'eating_club'
+);
+
 -- ---------------------------------------------------------------------------
 -- BETTER AUTH TABLES
 -- ---------------------------------------------------------------------------
@@ -41,6 +46,13 @@ CREATE TABLE "user" (
   email text NOT NULL,
   email_verified boolean NOT NULL DEFAULT false,
   image text,
+  student_id text,
+  graph_id text,
+  plan_code text,
+  is_exchange_eligible boolean NOT NULL DEFAULT false,
+  class_year integer,
+  home_establishment_id uuid,
+  eligibility_updated_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -61,6 +73,8 @@ COMMENT ON COLUMN "user".updated_at IS
   'Timestamp when the user row was last updated.';
 
 CREATE UNIQUE INDEX user_email_unique ON "user" (email);
+CREATE UNIQUE INDEX user_student_id_unique ON "user" (student_id);
+CREATE UNIQUE INDEX user_graph_id_unique ON "user" (graph_id);
 
 
 -- Active and historical login sessions.
@@ -167,16 +181,35 @@ COMMENT ON COLUMN verification.updated_at IS
 -- MEAL EXCHANGE TABLES
 -- ---------------------------------------------------------------------------
 
+CREATE TABLE establishment (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  type establishment_type NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX establishment_name_unique ON establishment (name);
+
+ALTER TABLE "user"
+  ADD CONSTRAINT user_home_establishment_id_establishment_id_fk
+  FOREIGN KEY (home_establishment_id) REFERENCES establishment (id);
+
 -- One invitation and eventual shared door pass between a host and counterpart.
 CREATE TABLE exchange (
   id uuid PRIMARY KEY,
   host_user_id text NOT NULL REFERENCES "user" (id) ON DELETE RESTRICT,
   counterpart_user_id text REFERENCES "user" (id) ON DELETE SET NULL,
+  meal_host_user_id text NOT NULL REFERENCES "user" (id) ON DELETE RESTRICT,
+  meal_guest_user_id text REFERENCES "user" (id) ON DELETE RESTRICT,
+  pair_key text NOT NULL,
   host_name text NOT NULL,
   counterpart_name text NOT NULL,
   counterpart_email text NOT NULL,
   location text NOT NULL,
+  establishment_id uuid NOT NULL REFERENCES establishment (id) ON DELETE RESTRICT,
   meal_type meal_type NOT NULL,
+  exchange_date date NOT NULL,
   expires_at timestamptz NOT NULL,
   status exchange_status NOT NULL DEFAULT 'pending',
   accepted_at timestamptz,
@@ -195,7 +228,7 @@ CREATE TABLE exchange (
 COMMENT ON COLUMN exchange.id IS
   'Application-generated UUID identifying the exchange.';
 COMMENT ON COLUMN exchange.host_user_id IS
-  'Authenticated user who created and owns the exchange. User deletion is restricted while hosted exchanges remain.';
+  'Authenticated initiator who created the exchange. This remains the legacy column name used by Alvin''s acceptance flow.';
 COMMENT ON COLUMN exchange.counterpart_user_id IS
   'Authenticated invited user who claimed the exchange. Null before acceptance and set to null if that account is deleted; accepted exchanges never fall back to email authorization.';
 COMMENT ON COLUMN exchange.host_name IS
@@ -205,9 +238,19 @@ COMMENT ON COLUMN exchange.counterpart_name IS
 COMMENT ON COLUMN exchange.counterpart_email IS
   'Normalized lowercase invitation snapshot. Used to authorize the initial claim; authorization uses counterpart_user_id afterward.';
 COMMENT ON COLUMN exchange.location IS
-  'Dining hall, eating club, or other place where the meal occurs.';
+  'Event-time name snapshot of the selected establishment.';
+COMMENT ON COLUMN exchange.establishment_id IS
+  'Validated active host location selected during Flow 1.';
+COMMENT ON COLUMN exchange.meal_host_user_id IS
+  'Participant whose dining hall or eating club hosts this meal.';
+COMMENT ON COLUMN exchange.meal_guest_user_id IS
+  'Participant visiting the host location. Nullable only for migrated legacy invitations.';
+COMMENT ON COLUMN exchange.pair_key IS
+  'Canonical participant pair used for duplicate prevention.';
 COMMENT ON COLUMN exchange.meal_type IS
   'Meal category covered by the exchange: lunch or dinner.';
+COMMENT ON COLUMN exchange.exchange_date IS
+  'Princeton-local calendar date on which the meal occurs.';
 COMMENT ON COLUMN exchange.expires_at IS
   'Deadline for accepting or using the exchange. Expired exchanges cannot be accepted and their door code is hidden.';
 COMMENT ON COLUMN exchange.status IS
@@ -249,6 +292,12 @@ CREATE INDEX exchange_counterpart_user_id_idx
 
 CREATE INDEX exchange_counterpart_email_idx
   ON exchange (counterpart_email);
+
+CREATE INDEX exchange_date_establishment_idx
+  ON exchange (exchange_date, establishment_id);
+
+CREATE UNIQUE INDEX exchange_pair_meal_unique
+  ON exchange (pair_key, exchange_date, meal_type, establishment_id);
 
 /*
  * Relationship summary
