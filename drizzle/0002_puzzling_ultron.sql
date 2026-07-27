@@ -1,0 +1,1 @@
+ALTER TABLE "exchange" RENAME COLUMN "scheduled_at" TO "expires_at";
