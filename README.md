@@ -73,10 +73,15 @@ state, meal-checking sessions, and completion audit fields.
 ```bash
 npm install
 cp .env.example .env.local
+npm run start-dependencies
 npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+`npm run start-dependencies` starts Postgres and a local Neon-compatible proxy
+with Docker Compose, waits for both services, and applies all Drizzle
+migrations. Database data persists in a Docker volume between runs.
 
 ## Email previews
 
@@ -91,9 +96,11 @@ fixtures live in `emails/` and can be edited without touching database data.
 
 ## Environment
 
-Set the values in `.env.local`, then mirror them in Vercel:
+The example environment is configured for local development. Set production
+values separately in Vercel:
 
-- `DATABASE_URL`: Neon Postgres connection string
+- `DATABASE_URL`: local Postgres connection string in `.env.local`; use the
+  production Neon connection string in Vercel
 - `BETTER_AUTH_SECRET`: long random secret for Better Auth
 - `BETTER_AUTH_URL`: app URL, for example `http://localhost:3000`
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: Google OAuth web credentials
@@ -107,6 +114,7 @@ For Google OAuth, add these redirect URIs in Google Cloud:
 ## Useful Scripts
 
 ```bash
+npm run start-dependencies
 npm run lint
 npm run format
 npm run db:generate

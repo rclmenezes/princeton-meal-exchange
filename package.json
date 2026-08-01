@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start-dependencies": "./scripts/start-dependencies.sh",
     "lint": "eslint .",
     "test": "vitest run",
     "email:dev": "email dev --dir emails --port 3001",
