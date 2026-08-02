@@ -106,7 +106,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
           <AuthButton
             callbackURL={`/exchanges/${token}`}
             className="button button-primary sign-in-button"
-            signInLabel="Sign in with Princeton NetID"
+            signInLabel="Sign in to review"
           />
         </div>
       </ExchangeShell>

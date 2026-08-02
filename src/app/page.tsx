@@ -22,8 +22,8 @@ export default function Home() {
             Share meals with less coordination overhead.
           </h2>
           <p className="mt-6 max-w-xl text-lg leading-8 text-[var(--muted)]">
-            This project is ready for Google sign-in, Neon Postgres via Drizzle,
-            Tailwind styling, and Resend-powered transactional email.
+            Sign in with a secure email link or Princeton TigerNet to start
+            coordinating meal exchanges.
           </p>
         </div>
       </section>
