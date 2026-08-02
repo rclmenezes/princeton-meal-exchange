@@ -13,6 +13,15 @@ const tigerNetConfigured = Boolean(
   process.env.TIGERNET_CLIENT_SECRET &&
   tigerNetIssuerUrl,
 );
+const vercelPreviewHost =
+  process.env.VERCEL_ENV === "preview"
+    ? (process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL)
+    : undefined;
+const authBaseUrl = vercelPreviewHost
+  ? `https://${vercelPreviewHost}`
+  : (process.env.BETTER_AUTH_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000");
 
 if (!authSecret && process.env.VERCEL === "1") {
   throw new Error("BETTER_AUTH_SECRET must be set in Vercel.");
@@ -20,10 +29,7 @@ if (!authSecret && process.env.VERCEL === "1") {
 
 export const auth = betterAuth({
   appName: "Princeton Meal Exchange",
-  baseURL:
-    process.env.BETTER_AUTH_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "http://localhost:3000",
+  baseURL: authBaseUrl,
   secret: authSecret ?? "development-only-princeton-meal-exchange-secret",
   trustedOrigins: ["https://meal.exchange", "https://*.vercel.app"],
   database: drizzleAdapter(db, {
