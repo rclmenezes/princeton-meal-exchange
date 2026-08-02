@@ -25,6 +25,7 @@ export const auth = betterAuth({
     process.env.NEXT_PUBLIC_APP_URL ??
     "http://localhost:3000",
   secret: authSecret ?? "development-only-princeton-meal-exchange-secret",
+  trustedOrigins: ["https://meal.exchange", "https://*.vercel.app"],
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
