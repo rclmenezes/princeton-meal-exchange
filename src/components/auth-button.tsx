@@ -1,6 +1,7 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { Button } from "@/components/ui/button";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 type AuthButtonProps = {
@@ -22,12 +23,14 @@ export function AuthButton({
   >("idle");
   const [emailMessage, setEmailMessage] = useState("");
   const [tigerNetPending, setTigerNetPending] = useState(false);
+  const [signOutPending, setSignOutPending] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailInput = useRef<HTMLInputElement>(null);
 
-  const buttonClassName =
-    className ?? "rounded-md bg-black px-4 py-2 text-sm font-medium text-white";
+  const triggerButtonProps = className
+    ? ({ className, size: "unstyled", variant: "unstyled" } as const)
+    : ({ size: "sm", variant: "primary" } as const);
 
   function showToast(message: string) {
     setToast(message);
@@ -118,39 +121,47 @@ export function AuthButton({
     }
   }
 
+  async function handleSignOut() {
+    setSignOutPending(true);
+    try {
+      await authClient.signOut();
+    } finally {
+      setSignOutPending(false);
+    }
+  }
+
   if (isPending) {
     return (
-      <button className={buttonClassName} disabled type="button">
-        Loading
-      </button>
+      <Button {...triggerButtonProps} disabled>
+        Loading…
+      </Button>
     );
   }
 
   if (session) {
     return (
-      <button
-        className={buttonClassName}
-        onClick={() => void authClient.signOut()}
-        type="button"
+      <Button
+        {...triggerButtonProps}
+        disabled={signOutPending}
+        onClick={() => void handleSignOut()}
       >
-        Sign out
-      </button>
+        {signOutPending ? "Logging out…" : "Log out"}
+      </Button>
     );
   }
 
   return (
     <>
-      <button
-        className={buttonClassName}
+      <Button
+        {...triggerButtonProps}
         onClick={() => {
           setDialogOpen(true);
           setEmailStatus("idle");
           setEmailMessage("");
         }}
-        type="button"
       >
         {signInLabel}
-      </button>
+      </Button>
 
       {dialogOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
@@ -175,26 +186,28 @@ export function AuthButton({
                   Sign in
                 </h2>
               </div>
-              <button
+              <Button
                 aria-label="Close sign-in dialog"
-                className="grid size-9 place-items-center rounded-md border border-black/15 text-xl text-[var(--muted)]"
                 onClick={() => setDialogOpen(false)}
-                type="button"
+                size="icon"
+                variant="ghost"
               >
-                ×
-              </button>
+                <span aria-hidden="true" className="text-2xl leading-none">
+                  ×
+                </span>
+              </Button>
             </div>
 
-            <button
-              className="mt-6 w-full rounded-md bg-black px-4 py-3 font-semibold text-white disabled:opacity-60"
+            <Button
+              className="mt-6 w-full"
               disabled={tigerNetPending}
               onClick={() => void handleTigerNetSignIn()}
-              type="button"
+              size="lg"
             >
               {tigerNetPending
                 ? "Connecting to TigerNet…"
                 : "Continue with Princeton TigerNet"}
-            </button>
+            </Button>
 
             <div className="my-5 flex items-center gap-3 text-xs font-semibold tracking-wide text-[var(--muted)] uppercase">
               <span className="h-px flex-1 bg-black/15" />
@@ -237,15 +250,17 @@ export function AuthButton({
                     {emailMessage}
                   </p>
                 ) : null}
-                <button
-                  className="mt-3 w-full rounded-md border border-black/25 px-4 py-3 font-semibold disabled:opacity-60"
+                <Button
+                  className="mt-3 w-full"
                   disabled={emailStatus === "sending"}
+                  size="lg"
                   type="submit"
+                  variant="outline"
                 >
                   {emailStatus === "sending"
                     ? "Sending sign-in link…"
                     : "Email me a sign-in link"}
-                </button>
+                </Button>
               </form>
             )}
 

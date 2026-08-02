@@ -49,8 +49,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 button {
-  font: inherit;
-  color: inherit;
+  font-family: inherit;
 }
 h1,
 h2,
