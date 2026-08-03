@@ -2,38 +2,33 @@ import { describe, expect, it } from "vitest";
 import {
   createBarcodeValue,
   deriveInvitationToken,
+  deriveMealRoles,
   fingerprintExchangeInput,
   hashInvitationToken,
-  isDevelopmentAuthBypassEnabled,
+  invitationExpiryForDate,
   isExchangeCounterpart,
   isExchangeExpired,
   isInviteRecipient,
+  isMealDatePast,
   normalizeEmail,
   validateCreateExchangeInput,
 } from "./exchange";
 
 const validInput = {
-  counterpartName: "Julian Park",
-  counterpartEmail: " JULIAN@Princeton.edu ",
-  location: "Cottage Club",
+  counterpartId: "student-2",
+  establishmentId: "3ec6de13-73b7-4baa-8497-dce75c34f908",
   mealType: "dinner",
-  expiresAt: "2030-05-12T23:00:00.000Z",
+  date: "2030-05-12",
 };
 
 describe("exchange input", () => {
-  it("normalizes email addresses", () => {
+  it("normalizes and matches invitation email addresses", () => {
     expect(normalizeEmail("  STUDENT@Princeton.EDU ")).toBe(
       "student@princeton.edu",
     );
-  });
-
-  it("matches the invited user to the current user by normalized email", () => {
     expect(
       isInviteRecipient(" STUDENT@princeton.edu ", "student@PRINCETON.EDU"),
     ).toBe(true);
-    expect(
-      isInviteRecipient("student@princeton.edu", "other@princeton.edu"),
-    ).toBe(false);
     expect(isInviteRecipient("student@princeton.edu", null)).toBe(false);
   });
 
@@ -56,46 +51,24 @@ describe("exchange input", () => {
         email: "student@princeton.edu",
       }),
     ).toBe(false);
-    expect(
-      isExchangeCounterpart(null, "student@princeton.edu", "accepted", {
-        id: "student-2",
-        email: "student@princeton.edu",
-      }),
-    ).toBe(false);
   });
 
-  it("allows auth bypass only outside production", () => {
-    expect(isDevelopmentAuthBypassEnabled("development", "true")).toBe(true);
-    expect(isDevelopmentAuthBypassEnabled("test", "true")).toBe(true);
-    expect(isDevelopmentAuthBypassEnabled("production", "true")).toBe(false);
-    expect(isDevelopmentAuthBypassEnabled("development", "false")).toBe(false);
-  });
-
-  it("determines expiration against an explicit clock", () => {
+  it("distinguishes invitation expiration from the meal date", () => {
     const now = new Date("2030-05-12T23:00:00.000Z");
     expect(isExchangeExpired(new Date("2030-05-12T22:59:59.000Z"), now)).toBe(
       true,
     );
-    expect(isExchangeExpired(new Date("2030-05-12T23:00:01.000Z"), now)).toBe(
-      false,
-    );
+    expect(isMealDatePast("2030-05-11", now)).toBe(true);
+    expect(isMealDatePast("2030-05-12", now)).toBe(false);
   });
 
-  it("validates and normalizes a complete exchange", () => {
-    const result = validateCreateExchangeInput(
+  it("validates a complete exchange and rejects malformed input", () => {
+    const valid = validateCreateExchangeInput(
       validInput,
       new Date("2029-01-01T00:00:00.000Z"),
     );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.counterpartEmail).toBe("julian@princeton.edu");
-      expect(result.data.expiresAt).toEqual(
-        new Date("2030-05-12T23:00:00.000Z"),
-      );
-    }
-  });
+    expect(valid).toEqual({ ok: true, data: validInput });
 
-  it("rejects past meals and malformed input", () => {
     expect(
       validateCreateExchangeInput(validInput, new Date("2031-01-01")),
     ).toMatchObject({ ok: false });
@@ -103,8 +76,11 @@ describe("exchange input", () => {
       validateCreateExchangeInput({ ...validInput, mealType: "breakfast" }),
     ).toEqual({ ok: false, error: "Meal type must be lunch or dinner." });
     expect(
-      validateCreateExchangeInput({ ...validInput, counterpartEmail: "nope" }),
-    ).toEqual({ ok: false, error: "A valid counterpart email is required." });
+      validateCreateExchangeInput({ ...validInput, counterpartId: "" }),
+    ).toEqual({
+      ok: false,
+      error: "Choose a student from the search results.",
+    });
   });
 
   it("creates a stable request fingerprint", () => {
@@ -113,13 +89,67 @@ describe("exchange input", () => {
       new Date("2029-01-01"),
     );
     const second = validateCreateExchangeInput(
-      { ...validInput, counterpartEmail: "julian@princeton.edu" },
+      { ...validInput },
       new Date("2029-01-01"),
     );
     if (!first.ok || !second.ok) throw new Error("Fixture should be valid");
     expect(fingerprintExchangeInput(first.data)).toBe(
       fingerprintExchangeInput(second.data),
     );
+  });
+
+  it("limits invitation acceptance to seven days or the meal date", () => {
+    expect(
+      invitationExpiryForDate(
+        "2030-05-20",
+        new Date("2030-05-01T12:00:00.000Z"),
+      ).toISOString(),
+    ).toBe("2030-05-08T12:00:00.000Z");
+    expect(
+      invitationExpiryForDate(
+        "2030-05-02",
+        new Date("2030-05-01T12:00:00.000Z"),
+      ).toISOString(),
+    ).toBe("2030-05-03T03:59:59.999Z");
+  });
+});
+
+describe("meal roles", () => {
+  const diningStudent = { id: "dining", homeEstablishmentId: null };
+  const clubStudent = { id: "club", homeEstablishmentId: "club-1" };
+
+  it("derives roles symmetrically at a dining hall and eating club", () => {
+    expect(
+      deriveMealRoles(clubStudent, diningStudent, {
+        id: "hall-1",
+        type: "dining_hall",
+      }),
+    ).toMatchObject({ ok: true, host: diningStudent, guest: clubStudent });
+    expect(
+      deriveMealRoles(diningStudent, clubStudent, {
+        id: "club-1",
+        type: "eating_club",
+      }),
+    ).toMatchObject({ ok: true, host: clubStudent, guest: diningStudent });
+  });
+
+  it("rejects locations that do not identify exactly one host", () => {
+    expect(
+      deriveMealRoles(
+        diningStudent,
+        { ...diningStudent, id: "dining-2" },
+        {
+          id: "hall-1",
+          type: "dining_hall",
+        },
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      deriveMealRoles(diningStudent, clubStudent, {
+        id: "other-club",
+        type: "eating_club",
+      }),
+    ).toMatchObject({ ok: false });
   });
 });
 

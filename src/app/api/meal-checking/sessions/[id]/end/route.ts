@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getAuthContext } from "@/lib/auth-context";
 import { endMealCheckSession } from "@/lib/meal-checking";
 import { NextResponse } from "next/server";
 
@@ -8,8 +8,8 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) {
+  const { user } = await getAuthContext(request.headers);
+  if (!user) {
     return NextResponse.json(
       { error: "Sign in before ending meal checking." },
       { status: 401 },
@@ -24,7 +24,7 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
-  const ended = await endMealCheckSession(id, session.user.id);
+  const ended = await endMealCheckSession(id, user.id);
   if (!ended) {
     return NextResponse.json(
       { error: "This session has already ended or belongs to another user." },

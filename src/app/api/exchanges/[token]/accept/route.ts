@@ -1,10 +1,10 @@
 import { db } from "@/db";
 import { exchange } from "@/db/schema";
-import { auth } from "@/lib/auth";
+import { getAuthContext } from "@/lib/auth-context";
 import {
-  isDevelopmentAuthBypassEnabled,
   isExchangeCounterpart,
   isExchangeExpired,
+  isMealDatePast,
 } from "@/lib/exchange";
 import {
   appUrlFromRequest,
@@ -23,11 +23,9 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Exchange not found." }, { status: 404 });
   }
 
-  const authBypassed = isDevelopmentAuthBypassEnabled();
-  const session = authBypassed
-    ? null
-    : await auth.api.getSession({ headers: request.headers });
-  if (!authBypassed && !session) {
+  const authContext = await getAuthContext(request.headers);
+  const { authBypassed } = authContext;
+  if (!authBypassed && !authContext.user) {
     return NextResponse.json(
       { error: "Sign in with the account that received this invitation." },
       { status: 401 },
@@ -40,7 +38,7 @@ export async function POST(request: Request, context: RouteContext) {
         record.counterpartUserId,
         record.counterpartEmail,
         record.status,
-        session?.user,
+        authContext.user,
       );
   if (!isCounterpart) {
     return NextResponse.json(
@@ -60,7 +58,13 @@ export async function POST(request: Request, context: RouteContext) {
       { status: 409 },
     );
   }
-  if (isExchangeExpired(record.expiresAt)) {
+  if (isMealDatePast(record.exchangeDate)) {
+    return NextResponse.json(
+      { error: "The scheduled meal date has passed." },
+      { status: 410 },
+    );
+  }
+  if (record.status === "pending" && isExchangeExpired(record.expiresAt)) {
     return NextResponse.json(
       { error: "This exchange invitation has expired." },
       { status: 410 },
@@ -72,7 +76,9 @@ export async function POST(request: Request, context: RouteContext) {
       .set({
         status: "accepted",
         acceptedAt: new Date(),
-        ...(session ? { counterpartUserId: session.user.id } : {}),
+        ...(!authBypassed && authContext.user
+          ? { counterpartUserId: authContext.user.id }
+          : {}),
         confirmationEmailStatus: "pending",
         updatedAt: new Date(),
       })
@@ -91,7 +97,7 @@ export async function POST(request: Request, context: RouteContext) {
         record.counterpartUserId,
         record.counterpartEmail,
         record.status,
-        session?.user,
+        authContext.user,
       )
     ) {
       return NextResponse.json(

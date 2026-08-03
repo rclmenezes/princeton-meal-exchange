@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   getSession,
@@ -31,6 +31,7 @@ const acceptedExchange = {
   counterpartUserId: "invitee",
   counterpartEmail: "invitee@princeton.edu",
   status: "accepted",
+  exchangeDate: "2100-01-01",
   expiresAt: new Date("2100-01-01T00:00:00.000Z"),
   barcodeValue: "ME-ABCD-EFGH-JKLM",
   confirmationEmailStatus: "sent",
@@ -43,11 +44,16 @@ const context = {
 describe("accept exchange API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.DEV_BYPASS_AUTH;
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEV_BYPASS_AUTH", "");
     getExchangeByToken.mockResolvedValue(acceptedExchange);
     update.mockReturnValue({ set });
     set.mockReturnValue({ where });
     where.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("requires a current user before mutating the exchange", async () => {
@@ -154,7 +160,7 @@ describe("accept exchange API", () => {
   });
 
   it("can impersonate the invited user in an explicit development preview", async () => {
-    process.env.DEV_BYPASS_AUTH = "true";
+    vi.stubEnv("DEV_BYPASS_AUTH", "true");
     getSession.mockResolvedValue(null);
     const response = await POST(
       new Request("https://example.test/api/exchanges/token/accept", {
@@ -172,7 +178,7 @@ describe("accept exchange API", () => {
   });
 
   it("does not accept or resend an expired exchange", async () => {
-    process.env.DEV_BYPASS_AUTH = "true";
+    vi.stubEnv("DEV_BYPASS_AUTH", "true");
     getExchangeByToken.mockResolvedValue({
       ...acceptedExchange,
       status: "pending",
@@ -188,6 +194,25 @@ describe("accept exchange API", () => {
     expect(response.status).toBe(410);
     expect(update).not.toHaveBeenCalled();
     expect(deliverConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("keeps an accepted pass usable after its invitation deadline", async () => {
+    getSession.mockResolvedValue({
+      user: { id: "invitee", email: "invitee@princeton.edu" },
+    });
+    getExchangeByToken.mockResolvedValue({
+      ...acceptedExchange,
+      expiresAt: new Date("2020-01-01T00:00:00.000Z"),
+    });
+
+    const response = await POST(
+      new Request("https://example.test/api/exchanges/token/accept", {
+        method: "POST",
+      }),
+      context,
+    );
+
+    expect(response.status).toBe(200);
   });
 
   it("does not accept or resend a completed exchange", async () => {

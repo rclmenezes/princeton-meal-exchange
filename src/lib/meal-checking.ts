@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/db";
-import { exchange, mealCheckSession } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { exchange, mealCheckSession, user } from "@/db/schema";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 // Princeton, New Jersey time zone
 export const MEAL_CHECKING_TIME_ZONE = "America/New_York";
@@ -12,6 +12,7 @@ export type MealCheckFailure =
   | "not_accepted"
   | "already_completed"
   | "wrong_date"
+  | "participant_ineligible"
   | "inactive_session"
   | "concurrent_check_in";
 
@@ -41,11 +42,15 @@ export function normalizeDoorCode(value: unknown) {
 
 // Compares meal dates in the configured venue time zone.
 export function isSameMealDate(
-  scheduledAt: Date,
+  scheduledAt: Date | string,
   now = new Date(),
   timeZone = MEAL_CHECKING_TIME_ZONE,
 ) {
-  return dateKey(scheduledAt, timeZone) === dateKey(now, timeZone);
+  const scheduledDate =
+    typeof scheduledAt === "string"
+      ? scheduledAt
+      : dateKey(scheduledAt, timeZone);
+  return scheduledDate === dateKey(now, timeZone);
 }
 
 // Resumes the checker's active session or creates one safely.
@@ -160,10 +165,24 @@ export async function checkInExchange({
       "This exchange is still awaiting acceptance.",
     );
   }
-  if (!isSameMealDate(record.expiresAt, now)) {
+  if (!isSameMealDate(record.exchangeDate, now)) {
     throw new MealCheckError(
       "wrong_date",
-      `This exchange is scheduled for ${formatMealDate(record.expiresAt)}, not today.`,
+      `This exchange is scheduled for ${formatMealDate(record.exchangeDate)}, not today.`,
+    );
+  }
+
+  const participants = await db
+    .select({ id: user.id, eligible: user.isExchangeEligible })
+    .from(user)
+    .where(inArray(user.id, [record.mealHostUserId, record.mealGuestUserId]));
+  if (
+    participants.length !== 2 ||
+    participants.some((participant) => !participant.eligible)
+  ) {
+    throw new MealCheckError(
+      "participant_ineligible",
+      "One or both students are not currently eligible for meal exchange.",
     );
   }
 
@@ -179,8 +198,8 @@ export async function checkInExchange({
     .where(and(eq(exchange.id, record.id), eq(exchange.status, "accepted")))
     .returning({
       id: exchange.id,
-      guestName: exchange.counterpartName,
       mealType: exchange.mealType,
+      locationName: exchange.location,
       completedAt: exchange.completedAt,
     });
 
@@ -191,7 +210,13 @@ export async function checkInExchange({
       "This exchange was checked in by another checker moments ago.",
     );
   }
-  return completed[0];
+  return {
+    ...completed[0],
+    guestName:
+      record.mealGuestUserId === record.hostUserId
+        ? record.hostName
+        : record.counterpartName,
+  };
 }
 
 // Produces a date-only key in the requested time zone.
@@ -205,11 +230,11 @@ function dateKey(value: Date, timeZone: string) {
 }
 
 // Formats the scheduled meal date for validation errors.
-function formatMealDate(value: Date) {
+function formatMealDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
-    timeZone: MEAL_CHECKING_TIME_ZONE,
-  }).format(value);
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
 }

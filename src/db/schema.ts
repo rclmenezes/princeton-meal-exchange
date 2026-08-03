@@ -1,7 +1,9 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -22,6 +24,24 @@ export const emailDeliveryStatus = pgEnum("email_delivery_status", [
   "sent",
   "failed",
 ]);
+export const establishmentType = pgEnum("establishment_type", [
+  "dining_hall",
+  "eating_club",
+]);
+
+export const establishment = pgTable(
+  "establishment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    type: establishmentType("type").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("establishment_name_unique").on(table.name)],
+);
 
 export const user = pgTable(
   "user",
@@ -31,6 +51,20 @@ export const user = pgTable(
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+    studentId: text("student_id"),
+    graphId: text("graph_id"),
+    planCode: text("plan_code"),
+    isExchangeEligible: boolean("is_exchange_eligible")
+      .notNull()
+      .default(false),
+    classYear: integer("class_year"),
+    homeEstablishmentId: uuid("home_establishment_id").references(
+      () => establishment.id,
+      { onDelete: "set null" },
+    ),
+    eligibilityUpdatedAt: timestamp("eligibility_updated_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -38,7 +72,11 @@ export const user = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("user_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("user_email_unique").on(table.email),
+    uniqueIndex("user_student_id_unique").on(table.studentId),
+    uniqueIndex("user_graph_id_unique").on(table.graphId),
+  ],
 );
 
 export const session = pgTable(
@@ -127,11 +165,22 @@ export const exchange = pgTable(
     counterpartUserId: text("counterpart_user_id").references(() => user.id, {
       onDelete: "set null",
     }),
+    mealHostUserId: text("meal_host_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    mealGuestUserId: text("meal_guest_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    pairKey: text("pair_key").notNull(),
     hostName: text("host_name").notNull(),
     counterpartName: text("counterpart_name").notNull(),
     counterpartEmail: text("counterpart_email").notNull(),
     location: text("location").notNull(),
+    establishmentId: uuid("establishment_id")
+      .notNull()
+      .references(() => establishment.id, { onDelete: "restrict" }),
     mealType: mealType("meal_type").notNull(),
+    exchangeDate: date("exchange_date", { mode: "string" }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     status: exchangeStatus("status").notNull().default("pending"),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
@@ -171,10 +220,20 @@ export const exchange = pgTable(
     index("exchange_counterpart_user_id_idx").on(table.counterpartUserId),
     index("exchange_counterpart_email_idx").on(table.counterpartEmail),
     index("exchange_meal_check_session_id_idx").on(table.mealCheckSessionId),
+    index("exchange_date_establishment_idx").on(
+      table.exchangeDate,
+      table.establishmentId,
+    ),
+    uniqueIndex("exchange_pair_meal_unique").on(
+      table.pairKey,
+      table.exchangeDate,
+      table.mealType,
+      table.establishmentId,
+    ),
   ],
 );
 
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ one, many }) => ({
   sessions: many(session),
   accounts: many(account),
   hostedExchanges: many(exchange, { relationName: "exchangeHost" }),
@@ -182,6 +241,10 @@ export const userRelations = relations(user, ({ many }) => ({
     relationName: "exchangeCounterpart",
   }),
   mealCheckSessions: many(mealCheckSession),
+  homeEstablishment: one(establishment, {
+    fields: [user.homeEstablishmentId],
+    references: [establishment.id],
+  }),
 }));
 
 export const exchangeRelations = relations(exchange, ({ one }) => ({
@@ -195,10 +258,29 @@ export const exchangeRelations = relations(exchange, ({ one }) => ({
     references: [user.id],
     relationName: "exchangeCounterpart",
   }),
+  mealHostUser: one(user, {
+    fields: [exchange.mealHostUserId],
+    references: [user.id],
+    relationName: "exchangeMealHost",
+  }),
+  mealGuestUser: one(user, {
+    fields: [exchange.mealGuestUserId],
+    references: [user.id],
+    relationName: "exchangeMealGuest",
+  }),
+  establishment: one(establishment, {
+    fields: [exchange.establishmentId],
+    references: [establishment.id],
+  }),
   mealCheckSession: one(mealCheckSession, {
     fields: [exchange.mealCheckSessionId],
     references: [mealCheckSession.id],
   }),
+}));
+
+export const establishmentRelations = relations(establishment, ({ many }) => ({
+  members: many(user),
+  exchanges: many(exchange),
 }));
 
 export const mealCheckSessionRelations = relations(

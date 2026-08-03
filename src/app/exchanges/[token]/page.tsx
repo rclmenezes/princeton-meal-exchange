@@ -1,11 +1,11 @@
 import { AuthButton } from "@/components/auth-button";
 import { ExchangeAction } from "@/components/exchange-action";
 import { createBarcodeSvg } from "@/lib/barcode";
-import { auth } from "@/lib/auth";
+import { getAuthContext } from "@/lib/auth-context";
 import {
-  isDevelopmentAuthBypassEnabled,
   isExchangeCounterpart,
   isExchangeExpired,
+  isMealDatePast,
 } from "@/lib/exchange";
 import { getExchangeByToken } from "@/lib/exchange-service";
 import type { Metadata } from "next";
@@ -26,6 +26,10 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   timeZone: "America/New_York",
   timeZoneName: "short",
+});
+const mealDateFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "full",
+  timeZone: "UTC",
 });
 
 export default async function ExchangePage({ params }: ExchangePageProps) {
@@ -70,11 +74,9 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
     );
   }
 
-  const authBypassed = isDevelopmentAuthBypassEnabled();
-  const session = authBypassed
-    ? null
-    : await auth.api.getSession({ headers: await headers() });
-  if (!authBypassed && !session) {
+  const authContext = await getAuthContext(await headers());
+  const { authBypassed } = authContext;
+  if (!authBypassed && !authContext.user) {
     return (
       <ExchangeShell>
         <div className="state-card state-card-centered">
@@ -119,7 +121,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
       record.counterpartUserId,
       record.counterpartEmail,
       record.status,
-      session?.user,
+      authContext.user,
     )
   ) {
     return (
@@ -143,7 +145,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
             </svg>
           </span>
           <p className="eyebrow">Different account</p>
-          <h1>This invitation isn’t for {session?.user.email}.</h1>
+          <h1>This invitation isn’t for {authContext.user?.email}.</h1>
           <p className="muted measure">
             {record.status !== "pending"
               ? "This exchange is linked to the account that accepted it. Sign in with that same account."
@@ -157,10 +159,21 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
 
   const completed = record.status === "completed";
   const accepted = record.status === "accepted";
-  const expired = !completed && isExchangeExpired(record.expiresAt);
+  const mealDatePassed = isMealDatePast(record.exchangeDate);
+  const expired =
+    !completed &&
+    (mealDatePassed || (!accepted && isExchangeExpired(record.expiresAt)));
   const emailFailed = record.confirmationEmailStatus === "failed";
   const barcodeSvg =
     accepted && !expired ? createBarcodeSvg(record.barcodeValue) : null;
+  const mealHostName =
+    record.mealHostUserId === record.hostUserId
+      ? record.hostName
+      : record.counterpartName;
+  const mealGuestName =
+    record.mealGuestUserId === record.hostUserId
+      ? record.hostName
+      : record.counterpartName;
 
   return (
     <ExchangeShell>
@@ -193,7 +206,7 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
           {expired
             ? "The door code is no longer active. Ask the host to create a new exchange."
             : completed
-              ? `${record.counterpartName}’s door pass has been used successfully.`
+              ? `${mealGuestName}’s door pass has been used successfully.`
               : accepted
                 ? `You’re all set, ${record.counterpartName}. Keep this pass ready for the door.`
                 : `${record.counterpartName}, review the details below and accept when you’re ready.`}
@@ -268,11 +281,11 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
         <dl className="detail-list">
           <div>
             <dt>Host</dt>
-            <dd>{record.hostName}</dd>
+            <dd>{mealHostName}</dd>
           </div>
           <div>
             <dt>Guest</dt>
-            <dd>{record.counterpartName}</dd>
+            <dd>{mealGuestName}</dd>
           </div>
           <div>
             <dt>Where</dt>
@@ -283,7 +296,15 @@ export default async function ExchangePage({ params }: ExchangePageProps) {
             <dd>{capitalize(record.mealType)}</dd>
           </div>
           <div>
-            <dt>Expires</dt>
+            <dt>Date</dt>
+            <dd>
+              {mealDateFormatter.format(
+                new Date(`${record.exchangeDate}T12:00:00Z`),
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>Invitation deadline</dt>
             <dd>{dateFormatter.format(record.expiresAt)}</dd>
           </div>
           {completed && record.completedAt ? (

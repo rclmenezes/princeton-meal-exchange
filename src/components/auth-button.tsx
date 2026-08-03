@@ -2,7 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type AuthButtonProps = {
   callbackURL?: string;
@@ -27,6 +27,8 @@ export function AuthButton({
   const [toast, setToast] = useState("");
   const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailInput = useRef<HTMLInputElement>(null);
+  const dialog = useRef<HTMLElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
 
   const triggerButtonProps = className
     ? ({ className, size: "unstyled", variant: "unstyled" } as const)
@@ -40,22 +42,51 @@ export function AuthButton({
     toastTimeout.current = setTimeout(() => setToast(""), 4500);
   }
 
+  const closeDialog = useCallback(() => {
+    setDialogOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }, []);
+
   useEffect(() => {
     if (!dialogOpen) {
       return;
     }
 
     emailInput.current?.focus();
+    const priorOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
 
-    function closeOnEscape(event: KeyboardEvent) {
+    function handleDialogKeys(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setDialogOpen(false);
+        event.preventDefault();
+        closeDialog();
+        return;
+      }
+      if (event.key !== "Tab" || !dialog.current) return;
+
+      const focusable = Array.from(
+        dialog.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     }
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [dialogOpen]);
+    window.addEventListener("keydown", handleDialogKeys);
+    return () => {
+      document.body.style.overflow = priorOverflow;
+      window.removeEventListener("keydown", handleDialogKeys);
+    };
+  }, [closeDialog, dialogOpen]);
 
   useEffect(
     () => () => {
@@ -159,6 +190,7 @@ export function AuthButton({
           setEmailStatus("idle");
           setEmailMessage("");
         }}
+        ref={trigger}
       >
         {signInLabel}
       </Button>
@@ -168,13 +200,14 @@ export function AuthButton({
           <button
             aria-label="Close sign-in dialog"
             className="absolute inset-0 cursor-default bg-black/45"
-            onClick={() => setDialogOpen(false)}
+            onClick={closeDialog}
             type="button"
           />
           <section
             aria-labelledby="sign-in-title"
             aria-modal="true"
             className="relative w-full max-w-md rounded-xl border border-black/20 bg-[var(--surface)] p-6 shadow-2xl"
+            ref={dialog}
             role="dialog"
           >
             <div className="flex items-start justify-between gap-4">
@@ -188,7 +221,7 @@ export function AuthButton({
               </div>
               <Button
                 aria-label="Close sign-in dialog"
-                onClick={() => setDialogOpen(false)}
+                onClick={closeDialog}
                 size="icon"
                 variant="ghost"
               >

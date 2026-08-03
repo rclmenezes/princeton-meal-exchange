@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getAuthContext } from "@/lib/auth-context";
 import {
   checkInExchange,
   MealCheckError,
@@ -15,13 +15,14 @@ const failureStatuses: Record<MealCheckFailure, number> = {
   not_accepted: 409,
   already_completed: 409,
   wrong_date: 409,
+  participant_ineligible: 409,
   inactive_session: 409,
   concurrent_check_in: 409,
 };
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) {
+  const { user } = await getAuthContext(request.headers);
+  if (!user) {
     return NextResponse.json(
       { error: "Sign in before checking in a guest." },
       { status: 401 },
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     const completed = await checkInExchange({
       code: input.code,
       sessionId: input.sessionId,
-      checkerUserId: session.user.id,
+      checkerUserId: user.id,
     });
     return NextResponse.json(completed);
   } catch (error) {

@@ -17,14 +17,20 @@ type CheckInResult = {
   id: string;
   guestName: string;
   mealType: "lunch" | "dinner";
+  locationName: string;
   completedAt: string;
 };
 
 type VisibleResult =
-  | { kind: "success"; data: CheckInResult }
-  | { kind: "error"; message: string };
+  { kind: "success"; data: CheckInResult } | { kind: "error"; message: string };
 
-export function MealChecker({ checkerName }: { checkerName: string }) {
+export function MealChecker({
+  checkerName,
+  authBypassed = false,
+}: {
+  checkerName: string;
+  authBypassed?: boolean;
+}) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
@@ -238,6 +244,11 @@ export function MealChecker({ checkerName }: { checkerName: string }) {
             <p className="eyebrow">Meal checker</p>
             <h1>Scan a guest pass</h1>
             <p className="checker-signed-in">Signed in as {checkerName}</p>
+            {authBypassed ? (
+              <p className="checker-signed-in" role="status">
+                Development preview · authentication bypassed
+              </p>
+            ) : null}
           </div>
           <span className="checker-status">
             <span aria-hidden="true" />
@@ -318,7 +329,10 @@ export function MealChecker({ checkerName }: { checkerName: string }) {
               {result.kind === "success" ? (
                 <>
                   <h2>{result.data.guestName}</h2>
-                  <p>{capitalize(result.data.mealType)}</p>
+                  <p>
+                    {capitalize(result.data.mealType)} at{" "}
+                    {result.data.locationName}
+                  </p>
                 </>
               ) : (
                 <>

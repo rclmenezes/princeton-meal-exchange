@@ -1,6 +1,6 @@
 import { AuthButton } from "@/components/auth-button";
 import { MealChecker } from "@/components/meal-checker";
-import { auth } from "@/lib/auth";
+import { ensureDevelopmentAuthUser, getAuthContext } from "@/lib/auth-context";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 
@@ -10,11 +10,15 @@ export const metadata: Metadata = {
 };
 
 export default async function MealCheckingPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const { user, authBypassed } = await getAuthContext(await headers());
+
+  if (authBypassed) {
+    await ensureDevelopmentAuthUser();
+  }
 
   // TODO(flow-5): Replace this authenticated-user guard with an admin-role
   // and establishment authorization check.
-  if (!session) {
+  if (!user) {
     return (
       <main className="meal-checking-page">
         <section className="checker-state-card" aria-labelledby="sign-in-title">
@@ -33,5 +37,5 @@ export default async function MealCheckingPage() {
     );
   }
 
-  return <MealChecker checkerName={session.user.name} />;
+  return <MealChecker authBypassed={authBypassed} checkerName={user.name} />;
 }

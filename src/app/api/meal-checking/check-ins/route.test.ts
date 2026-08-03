@@ -45,6 +45,7 @@ describe("meal check-in API", () => {
       id: "exchange-1",
       guestName: "Julian Park",
       mealType: "dinner",
+      locationName: "Cottage Club",
       completedAt: new Date("2026-07-23T22:00:00.000Z"),
     });
   });
@@ -77,6 +78,7 @@ describe("meal check-in API", () => {
     expect(await response.json()).toMatchObject({
       guestName: "Julian Park",
       mealType: "dinner",
+      locationName: "Cottage Club",
     });
   });
 

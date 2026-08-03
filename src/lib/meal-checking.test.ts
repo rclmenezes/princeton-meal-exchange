@@ -11,6 +11,9 @@ const {
   values,
   onConflictDoNothing,
   insertReturning,
+  select,
+  from,
+  eligibilityWhere,
 } = vi.hoisted(() => ({
   sessionFindFirst: vi.fn(),
   exchangeFindFirst: vi.fn(),
@@ -22,6 +25,9 @@ const {
   values: vi.fn(),
   onConflictDoNothing: vi.fn(),
   insertReturning: vi.fn(),
+  select: vi.fn(),
+  from: vi.fn(),
+  eligibilityWhere: vi.fn(),
 }));
 
 vi.mock("@/db", () => ({
@@ -32,13 +38,13 @@ vi.mock("@/db", () => ({
     },
     update,
     insert,
+    select,
   },
 }));
 
 import {
   checkInExchange,
   isSameMealDate,
-  MealCheckError,
   normalizeDoorCode,
   startMealCheckSession,
 } from "./meal-checking";
@@ -54,8 +60,14 @@ const acceptedExchange = {
   id: "3ec6de13-73b7-4baa-8497-dce75c34f908",
   status: "accepted",
   barcodeValue: "ME-ABCD-EFGH-JKLM",
+  hostUserId: "host-user-1",
+  hostName: "Maya Hernandez",
   counterpartName: "Julian Park",
+  mealHostUserId: "host-user-1",
+  mealGuestUserId: "guest-user-1",
   mealType: "dinner",
+  location: "Cottage Club",
+  exchangeDate: "2026-07-23",
   expiresAt: new Date("2026-07-23T23:00:00.000Z"),
 };
 
@@ -85,11 +97,17 @@ describe("checkInExchange", () => {
     update.mockReturnValue({ set });
     set.mockReturnValue({ where });
     where.mockReturnValue({ returning });
+    select.mockReturnValue({ from });
+    from.mockReturnValue({ where: eligibilityWhere });
+    eligibilityWhere.mockResolvedValue([
+      { id: "host-user-1", eligible: true },
+      { id: "guest-user-1", eligible: true },
+    ]);
     returning.mockResolvedValue([
       {
         id: acceptedExchange.id,
-        guestName: acceptedExchange.counterpartName,
         mealType: acceptedExchange.mealType,
+        locationName: acceptedExchange.location,
         completedAt: new Date("2026-07-23T22:00:00.000Z"),
       },
     ]);
@@ -113,6 +131,7 @@ describe("checkInExchange", () => {
     expect(result).toMatchObject({
       guestName: "Julian Park",
       mealType: "dinner",
+      locationName: "Cottage Club",
     });
   });
 
@@ -129,7 +148,7 @@ describe("checkInExchange", () => {
         checkerUserId: "checker-1",
         now: new Date("2026-07-23T22:00:00.000Z"),
       }),
-    ).rejects.toMatchObject<Partial<MealCheckError>>({ reason });
+    ).rejects.toMatchObject({ reason });
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -141,9 +160,43 @@ describe("checkInExchange", () => {
         checkerUserId: "checker-1",
         now: new Date("2026-07-24T22:00:00.000Z"),
       }),
-    ).rejects.toMatchObject<Partial<MealCheckError>>({
+    ).rejects.toMatchObject({
       reason: "wrong_date",
     });
+  });
+
+  it("fails closed when either participant is not eligible", async () => {
+    eligibilityWhere.mockResolvedValue([
+      { id: "host-user-1", eligible: true },
+      { id: "guest-user-1", eligible: false },
+    ]);
+
+    await expect(
+      checkInExchange({
+        code: acceptedExchange.barcodeValue,
+        sessionId: activeSession.id,
+        checkerUserId: "checker-1",
+        now: new Date("2026-07-23T22:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({ reason: "participant_ineligible" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("returns the initiator snapshot when the initiator is the meal guest", async () => {
+    exchangeFindFirst.mockResolvedValue({
+      ...acceptedExchange,
+      mealHostUserId: "guest-user-1",
+      mealGuestUserId: "host-user-1",
+    });
+
+    await expect(
+      checkInExchange({
+        code: acceptedExchange.barcodeValue,
+        sessionId: activeSession.id,
+        checkerUserId: "checker-1",
+        now: new Date("2026-07-23T22:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({ guestName: "Maya Hernandez" });
   });
 
   it("reports a concurrent duplicate when the guarded update loses the race", async () => {
@@ -156,7 +209,7 @@ describe("checkInExchange", () => {
         checkerUserId: "checker-1",
         now: new Date("2026-07-23T22:00:00.000Z"),
       }),
-    ).rejects.toMatchObject<Partial<MealCheckError>>({
+    ).rejects.toMatchObject({
       reason: "concurrent_check_in",
     });
   });
