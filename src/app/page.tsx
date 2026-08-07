@@ -3,13 +3,18 @@ import { HomeActions } from "@/components/home-actions";
 import { db } from "@/db";
 import { establishment, user } from "@/db/schema";
 import { ensureDevelopmentAuthUser, getAuthContext } from "@/lib/auth-context";
+import {
+  getManagementContext,
+  getPendingOrganizationEntry,
+} from "@/lib/admin-authorization";
 import { asc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const authContext = await getAuthContext(await headers());
+  const requestHeaders = await headers();
+  const authContext = await getAuthContext(requestHeaders);
   if (authContext.authBypassed) await ensureDevelopmentAuthUser();
   const currentUser = authContext.user;
   const [locations, profile] = currentUser
@@ -31,6 +36,21 @@ export default async function Home() {
       ])
     : [[], []];
   const eligible = profile[0]?.eligible === true;
+  const management = currentUser
+    ? await getManagementContext(requestHeaders)
+    : null;
+  const pending =
+    currentUser && management && !management.establishmentId
+      ? await getPendingOrganizationEntry(currentUser.id)
+      : null;
+  const adminHref = management?.platformAdmin
+    ? "/platform-admin"
+    : management?.organizationRole === "owner" ||
+        management?.organizationRole === "admin"
+      ? "/admin"
+      : pending && pending.role !== "member"
+        ? "/organization-pending"
+        : null;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-5 py-6 sm:px-8">
@@ -44,7 +64,10 @@ export default async function Home() {
           </p>
           <p className="text-2xl font-semibold">Meal Exchange</p>
         </div>
-        <HomeActions authBypassed={authContext.authBypassed} />
+        <HomeActions
+          adminHref={adminHref}
+          authBypassed={authContext.authBypassed}
+        />
       </nav>
 
       <div className="flex-1 py-10 sm:py-14" id="home-content">

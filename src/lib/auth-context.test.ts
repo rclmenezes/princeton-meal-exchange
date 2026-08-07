@@ -9,6 +9,7 @@ const {
   from,
   where,
   limit,
+  isUserAllowed,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   insert: vi.fn(),
@@ -18,9 +19,11 @@ const {
   from: vi.fn(),
   where: vi.fn(),
   limit: vi.fn(),
+  isUserAllowed: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/roster-access", () => ({ isUserAllowed }));
 vi.mock("@/db", () => ({ db: { insert, select } }));
 vi.mock("@/db/schema", () => ({
   establishment: { id: "establishment.id", name: "establishment.name" },
@@ -33,6 +36,8 @@ import {
   ensureDevelopmentAuthUser,
   getAuthContext,
   isDevelopmentAuthBypassEnabled,
+  isDevelopmentOrganizationAdminBypassEnabled,
+  isDevelopmentPlatformAdminBypassEnabled,
 } from "./auth-context";
 
 describe("development auth bypass", () => {
@@ -45,6 +50,7 @@ describe("development auth bypass", () => {
     from.mockReturnValue({ where });
     where.mockReturnValue({ limit });
     limit.mockResolvedValue([{ id: "cottage-id" }]);
+    isUserAllowed.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -56,6 +62,29 @@ describe("development auth bypass", () => {
     expect(isDevelopmentAuthBypassEnabled("test", "true")).toBe(false);
     expect(isDevelopmentAuthBypassEnabled("production", "true")).toBe(false);
     expect(isDevelopmentAuthBypassEnabled("development", "false")).toBe(false);
+  });
+
+  it("requires the base bypass and development mode for admin roles", () => {
+    expect(
+      isDevelopmentOrganizationAdminBypassEnabled(
+        "development",
+        "true",
+        "true",
+      ),
+    ).toBe(true);
+    expect(
+      isDevelopmentPlatformAdminBypassEnabled("development", "true", "true"),
+    ).toBe(true);
+    expect(
+      isDevelopmentOrganizationAdminBypassEnabled(
+        "development",
+        "false",
+        "true",
+      ),
+    ).toBe(false);
+    expect(
+      isDevelopmentPlatformAdminBypassEnabled("production", "true", "true"),
+    ).toBe(false);
   });
 
   it("returns the fixed local identity without calling Better Auth", async () => {
@@ -79,6 +108,22 @@ describe("development auth bypass", () => {
 
     await expect(getAuthContext(new Headers())).resolves.toEqual({
       user,
+      authBypassed: false,
+    });
+  });
+
+  it("rejects a valid Better Auth session after roster access is removed", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const user = {
+      id: "removed-student",
+      name: "Removed Student",
+      email: "removed@princeton.edu",
+    };
+    getSession.mockResolvedValue({ user });
+    isUserAllowed.mockResolvedValue(false);
+
+    await expect(getAuthContext(new Headers())).resolves.toEqual({
+      user: null,
       authBypassed: false,
     });
   });

@@ -43,6 +43,20 @@
       "when": 1785711815444,
       "tag": "0005_lonely_justice",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786112051053,
+      "tag": "0006_lowly_fixer",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786112175666,
+      "tag": "0007_striped_toxin",
+      "breakpoints": true
     }
   ]
 }

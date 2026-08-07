@@ -10,6 +10,8 @@ export const DEVELOPMENT_AUTH_USER = {
   email: "development-auth-bypass@localhost.invalid",
 } satisfies AppUser;
 
+export const DEVELOPMENT_AUTH_SESSION_ID = "development-auth-bypass-session";
+
 export const DEVELOPMENT_COUNTERPARTS = [
   {
     id: "development-cottage-member",
@@ -32,10 +34,45 @@ export const DEVELOPMENT_COUNTERPARTS = [
 // The bypass is deliberately limited to `next dev`. Tests and production
 // continue to exercise the real authentication boundary by default.
 export function isDevelopmentAuthBypassEnabled(
-  nodeEnv = process.env.NODE_ENV,
-  configuredValue = process.env.DEV_BYPASS_AUTH,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+  configuredValue: string | undefined = process.env.DEV_BYPASS_AUTH,
 ) {
   return nodeEnv === "development" && configuredValue === "true";
+}
+
+function isDevelopmentRoleBypassEnabled(
+  configuredValue: string | undefined,
+  nodeEnv: string | undefined,
+  authConfiguredValue: string | undefined,
+) {
+  return (
+    isDevelopmentAuthBypassEnabled(nodeEnv, authConfiguredValue) &&
+    configuredValue === "true"
+  );
+}
+
+export function isDevelopmentOrganizationAdminBypassEnabled(
+  nodeEnv = process.env.NODE_ENV,
+  authConfiguredValue = process.env.DEV_BYPASS_AUTH,
+  configuredValue = process.env.DEV_BYPASS_ORGANIZATION_ADMIN,
+) {
+  return isDevelopmentRoleBypassEnabled(
+    configuredValue,
+    nodeEnv,
+    authConfiguredValue,
+  );
+}
+
+export function isDevelopmentPlatformAdminBypassEnabled(
+  nodeEnv = process.env.NODE_ENV,
+  authConfiguredValue = process.env.DEV_BYPASS_AUTH,
+  configuredValue = process.env.DEV_BYPASS_PLATFORM_ADMIN,
+) {
+  return isDevelopmentRoleBypassEnabled(
+    configuredValue,
+    nodeEnv,
+    authConfiguredValue,
+  );
 }
 
 export async function getAuthContext(requestHeaders: Headers): Promise<{
@@ -48,7 +85,14 @@ export async function getAuthContext(requestHeaders: Headers): Promise<{
 
   const { auth } = await import("@/lib/auth");
   const session = await auth.api.getSession({ headers: requestHeaders });
-  return { user: session?.user ?? null, authBypassed: false };
+  if (!session) return { user: null, authBypassed: false };
+  if (process.env.NODE_ENV === "production") {
+    const { isUserAllowed } = await import("@/lib/roster-access");
+    if (!(await isUserAllowed(session.user.id))) {
+      return { user: null, authBypassed: false };
+    }
+  }
+  return { user: session.user, authBypassed: false };
 }
 
 // Persist local-only roster fixtures before foreign-key-backed development
