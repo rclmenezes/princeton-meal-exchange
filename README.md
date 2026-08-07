@@ -2,8 +2,10 @@
 
 A mobile-responsive Next.js application for Princeton's reciprocal meal
 exchange program. The current implementation covers persisted exchange
-creation and acceptance, a shared barcode, and meal-checking sessions. Better
-Auth provides passwordless email and production TigerNet OIDC authentication.
+creation and acceptance, a shared barcode, meal-checking sessions, and
+roster-driven eating-club administration. Better Auth provides passwordless
+email, production TigerNet OIDC authentication, platform administration, and
+organization membership.
 
 The complete database structure is documented in
 [`docs/database-schema.sql`](docs/database-schema.sql).
@@ -11,6 +13,9 @@ The complete database structure is documented in
 ## Authentication
 
 - Passwordless email links are delivered through Resend.
+- New accounts are created only for active roster emails or emails listed in
+  `PLATFORM_ADMIN_EMAILS`. Magic-link requests always return a generic response,
+  including for denied addresses.
 - TigerNet OIDC is registered only in production and requests `openid`,
   `profile`, and `email`.
 - TigerNet is intentionally unavailable in local development; the sign-in
@@ -87,8 +92,9 @@ Check-in validates all currently available Flow 3 rules:
 
 Completion is atomic and records the checker session and timestamp. The UI
 shows the derived guest, meal type, and stored location. Establishment-bound
-admin authorization and wrong-location rejection remain Flow 5 work; a session
-does not yet select or infer a venue.
+meal-checker authorization and wrong-location rejection remain a future Flow 3
+integration; Flow 5 deliberately does not change the existing meal-checking
+routes or behavior.
 
 Roster ingestion and eligibility freshness are owned by Flow 4. These flows use
 the persisted boolean and intentionally do not call Microsoft Graph or impose a
@@ -96,6 +102,41 @@ separate freshness threshold.
 
 Camera access requires HTTPS after deployment and works on `localhost` during
 development.
+
+## Flow 5: Roster-driven administration
+
+Better Auth's Admin and Organization plugins back the platform and club access
+models. Organization creation, deletion, invitations, and direct member
+mutation are not exposed through their stock APIs; the active roster is the
+only membership authority.
+
+- Platform administrators must appear in the case-insensitive
+  `PLATFORM_ADMIN_EMAILS` environment variable and have the persisted Better
+  Auth `admin` role.
+- Organization roles are `owner`, `admin`, and `member`. Owners and admins can
+  manage their club roster; only owners and platform administrators can
+  transfer ownership.
+- The first allowlisted club owner to sign in creates the Better Auth
+  organization and provisions already-registered roster users.
+- An admin who signs in before the first owner sees `/organization-pending`.
+- Each club may have one `shared_meal_checking` account. It is always an
+  exchange-ineligible organization admin and may hold concurrent sessions on
+  multiple devices. Audit records identify the shared account and session, not
+  the individual operator.
+- Removing a person's final active roster source revokes all sessions, keeps
+  the user row, marks exchange eligibility false, and queues an idempotent
+  Resend notification.
+
+The club dashboard is at `/admin`; the website-team console is at
+`/platform-admin`. CSV uploads are UTF-8 files up to 2 MB. Required columns are
+`email`, `full_name`, `role`, and `exchange_eligible`; optional columns are
+`student_id`, `class_year`, and `account_type`. Every upload must be previewed,
+and application rechecks the file checksum and roster version inside a
+transaction.
+
+Flow 4's Princeton student/class-year feed remains deferred. Until it is
+implemented, ordinary students who are not represented by another active
+roster source cannot create accounts.
 
 ## Getting started
 
@@ -122,6 +163,10 @@ npm run start-dependencies
 The first command permanently removes this Compose project's local database
 volume.
 
+Migrations `0006_lowly_fixer.sql` and `0007_striped_toxin.sql` add the Better
+Auth Admin/Organization schema, roster authority, audit and notification
+tables, plus supporting identity indexes.
+
 ## Environment
 
 - `DATABASE_URL`: local Postgres URL in `.env.local`; production Neon URL in
@@ -131,6 +176,7 @@ volume.
 - `TIGERNET_CLIENT_ID`, `TIGERNET_CLIENT_SECRET`, `TIGERNET_ISSUER_URL`:
   production TigerNet OIDC configuration
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`: transactional email configuration
+- `PLATFORM_ADMIN_EMAILS`: comma-separated, server-only website-team allowlist
 - `DEV_BYPASS_AUTH`: optional local-only Flow 1–3 preview identity
 
 Magic-link sign-in requires Resend credentials. Without them, non-production
@@ -147,7 +193,11 @@ npm run lint
 npm run format:check
 npm run db:generate
 npm run db:migrate
+npm run auth:generate
 npm run email:dev
 ```
 
 Drizzle migrations are generated from `src/db/schema.ts` into `drizzle/`.
+The pinned `auth:generate` command uses `auth@1.6.11`, matching the installed
+Better Auth runtime. Use it to verify plugin schema changes before incorporating
+them into the application-owned Drizzle schema.

@@ -48,7 +48,14 @@ export async function getAuthContext(requestHeaders: Headers): Promise<{
 
   const { auth } = await import("@/lib/auth");
   const session = await auth.api.getSession({ headers: requestHeaders });
-  return { user: session?.user ?? null, authBypassed: false };
+  if (!session) return { user: null, authBypassed: false };
+  if (process.env.NODE_ENV === "production") {
+    const { isUserAllowed } = await import("@/lib/roster-access");
+    if (!(await isUserAllowed(session.user.id))) {
+      return { user: null, authBypassed: false };
+    }
+  }
+  return { user: session.user, authBypassed: false };
 }
 
 // Persist local-only roster fixtures before foreign-key-backed development

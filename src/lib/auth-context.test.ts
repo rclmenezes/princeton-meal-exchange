@@ -9,6 +9,7 @@ const {
   from,
   where,
   limit,
+  isUserAllowed,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   insert: vi.fn(),
@@ -18,9 +19,11 @@ const {
   from: vi.fn(),
   where: vi.fn(),
   limit: vi.fn(),
+  isUserAllowed: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
+vi.mock("@/lib/roster-access", () => ({ isUserAllowed }));
 vi.mock("@/db", () => ({ db: { insert, select } }));
 vi.mock("@/db/schema", () => ({
   establishment: { id: "establishment.id", name: "establishment.name" },
@@ -45,6 +48,7 @@ describe("development auth bypass", () => {
     from.mockReturnValue({ where });
     where.mockReturnValue({ limit });
     limit.mockResolvedValue([{ id: "cottage-id" }]);
+    isUserAllowed.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -79,6 +83,22 @@ describe("development auth bypass", () => {
 
     await expect(getAuthContext(new Headers())).resolves.toEqual({
       user,
+      authBypassed: false,
+    });
+  });
+
+  it("rejects a valid Better Auth session after roster access is removed", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const user = {
+      id: "removed-student",
+      name: "Removed Student",
+      email: "removed@princeton.edu",
+    };
+    getSession.mockResolvedValue({ user });
+    isUserAllowed.mockResolvedValue(false);
+
+    await expect(getAuthContext(new Headers())).resolves.toEqual({
+      user: null,
       authBypassed: false,
     });
   });

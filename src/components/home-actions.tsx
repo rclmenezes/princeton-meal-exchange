@@ -6,8 +6,10 @@ import Link from "next/link";
 
 export function HomeActions({
   authBypassed = false,
+  adminHref,
 }: {
   authBypassed?: boolean;
+  adminHref?: string | null;
 }) {
   if (authBypassed) {
     return (
@@ -22,20 +24,31 @@ export function HomeActions({
     );
   }
 
-  return <AuthenticatedHomeActions />;
+  return <AuthenticatedHomeActions adminHref={adminHref} />;
 }
 
-function AuthenticatedHomeActions() {
+function AuthenticatedHomeActions({
+  adminHref,
+}: {
+  adminHref?: string | null;
+}) {
   const { data: session, isPending } = authClient.useSession();
 
   return (
     <div className="home-actions">
       {!isPending && session ? (
-        <Link className="home-checking-link" href="/meal-checking">
-          Meal checking
-        </Link>
+        <>
+          {adminHref ? (
+            <Link className="home-checking-link" href={adminHref}>
+              Administration
+            </Link>
+          ) : null}
+          <Link className="home-checking-link" href="/meal-checking">
+            Meal checking
+          </Link>
+        </>
       ) : null}
-      <AuthButton />
+      <AuthButton callbackURL="/auth/complete" />
     </div>
   );
 }

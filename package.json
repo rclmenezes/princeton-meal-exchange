@@ -15,7 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "auth:generate": "npx auth@latest generate --config src/lib/auth.ts --output src/db/auth-schema.ts"
+    "auth:generate": "npx auth@1.6.11 generate --config src/lib/auth.ts --output src/db/auth-schema.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -27,6 +27,7 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "next": "^16.2.6",
+    "pg": "^8.22.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-email": "^6.9.0",
