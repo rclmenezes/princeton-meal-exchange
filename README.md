@@ -20,10 +20,13 @@ The complete database structure is documented in
   `profile`, and `email`.
 - TigerNet is intentionally unavailable in local development; the sign-in
   dialog displays an accessible explanation instead.
-- For local Flow 1–3 development without configured auth, set
-  `DEV_BYPASS_AUTH="true"` in `.env.local`. The bypass creates a clearly marked
-  local identity and roster fixtures. It can only run under `next dev`; tests
-  and production always use Better Auth.
+- For local development without configured auth, set `DEV_BYPASS_AUTH="true"`
+  in `.env.local`. The bypass creates a clearly marked local identity. It can
+  only run under `next dev`; tests and production always use Better Auth.
+- Flow 5 has two additional, explicit local role switches:
+  `DEV_BYPASS_ORGANIZATION_ADMIN="true"` and
+  `DEV_BYPASS_PLATFORM_ADMIN="true"`. Both depend on the base auth bypass and
+  are ignored outside `next dev`.
 
 Register this callback URL with TigerNet:
 
@@ -144,12 +147,23 @@ roster source cannot create accounts.
 npm install
 copy .env.example .env.local
 npm run start-dependencies
+npm run db:seed:flow5
 npm run dev
 ```
 
 Open `http://localhost:3000`. `npm run start-dependencies` uses the
 cross-platform Node script to start Postgres and the local Neon-compatible proxy,
 wait for both services, and apply all Drizzle migrations.
+
+`db:seed:flow5` is an idempotent, local-database-only seed. It creates three
+sample Better Auth organizations, registered users, linked organization
+memberships, club and Princeton roster entries, shared meal-checking accounts,
+and a few upcoming/completed exchanges. It updates only its deterministic
+development fixtures and refuses non-local database hosts. With all three
+development bypass variables enabled, open `/platform-admin`; use each club's
+"Manage club" link to preview its `/admin` dashboard. With only the
+organization-admin role enabled, the local developer previews Cottage Club
+directly at `/admin`.
 
 Migration `0005_lonely_justice.sql` adds required fields to existing exchange
 rows, so it assumes a disposable empty development exchange table. To rebuild
@@ -177,7 +191,11 @@ tables, plus supporting identity indexes.
   production TigerNet OIDC configuration
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`: transactional email configuration
 - `PLATFORM_ADMIN_EMAILS`: comma-separated, server-only website-team allowlist
-- `DEV_BYPASS_AUTH`: optional local-only Flow 1–3 preview identity
+- `DEV_BYPASS_AUTH`: optional local-only preview identity
+- `DEV_BYPASS_ORGANIZATION_ADMIN`: optional local-only organization-admin role
+  for the preview identity; requires `DEV_BYPASS_AUTH=true`
+- `DEV_BYPASS_PLATFORM_ADMIN`: optional local-only platform-admin role for the
+  preview identity; requires `DEV_BYPASS_AUTH=true`
 
 Magic-link sign-in requires Resend credentials. Without them, non-production
 exchange emails are skipped with an explicit server-console warning so the
@@ -193,6 +211,7 @@ npm run lint
 npm run format:check
 npm run db:generate
 npm run db:migrate
+npm run db:seed:flow5
 npm run auth:generate
 npm run email:dev
 ```

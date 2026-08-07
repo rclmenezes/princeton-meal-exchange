@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { user } from "@/db/schema";
+import { session, user } from "@/db/schema";
 import { hasValidMutationOrigin, writeAdminAudit } from "@/lib/admin-audit";
 import { getManagementContext } from "@/lib/admin-authorization";
 import { auth } from "@/lib/auth";
+import { isDevelopmentPlatformAdminBypassEnabled } from "@/lib/auth-context";
 import { isPlatformAdminEmail } from "@/lib/roster-access";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -58,14 +59,31 @@ export async function POST(request: Request, routeContext: RouteContext) {
       { status: 400 },
     );
 
-  await auth.api.banUser({
-    headers: request.headers,
-    body: {
-      userId: authorized.target.id,
-      banReason: reason,
-      ...(expiresIn ? { banExpiresIn: expiresIn } : {}),
-    },
-  });
+  if (isDevelopmentPlatformAdminBypassEnabled()) {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(user)
+        .set({
+          banned: true,
+          banReason: reason,
+          banExpires: expiresIn
+            ? new Date(Date.now() + expiresIn * 1_000)
+            : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(user.id, authorized.target.id));
+      await tx.delete(session).where(eq(session.userId, authorized.target.id));
+    });
+  } else {
+    await auth.api.banUser({
+      headers: request.headers,
+      body: {
+        userId: authorized.target.id,
+        banReason: reason,
+        ...(expiresIn ? { banExpiresIn: expiresIn } : {}),
+      },
+    });
+  }
   await writeAdminAudit(
     {
       userId: authorized.management.user.id,
@@ -87,10 +105,22 @@ export async function DELETE(request: Request, routeContext: RouteContext) {
       { error: authorized.error },
       { status: authorized.status },
     );
-  await auth.api.unbanUser({
-    headers: request.headers,
-    body: { userId: authorized.target.id },
-  });
+  if (isDevelopmentPlatformAdminBypassEnabled()) {
+    await db
+      .update(user)
+      .set({
+        banned: false,
+        banReason: null,
+        banExpires: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(user.id, authorized.target.id));
+  } else {
+    await auth.api.unbanUser({
+      headers: request.headers,
+      body: { userId: authorized.target.id },
+    });
+  }
   await writeAdminAudit(
     {
       userId: authorized.management.user.id,

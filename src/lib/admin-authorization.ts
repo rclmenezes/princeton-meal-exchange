@@ -1,6 +1,14 @@
 import { db } from "@/db";
 import { establishment, member, rosterEntry, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import {
+  DEVELOPMENT_AUTH_SESSION_ID,
+  DEVELOPMENT_AUTH_USER,
+  ensureDevelopmentAuthUser,
+  isDevelopmentAuthBypassEnabled,
+  isDevelopmentOrganizationAdminBypassEnabled,
+  isDevelopmentPlatformAdminBypassEnabled,
+} from "@/lib/auth-context";
 import { getUserAccess, isPlatformAdminEmail } from "@/lib/roster-access";
 import { and, eq } from "drizzle-orm";
 
@@ -17,6 +25,82 @@ export async function getManagementContext(
   requestHeaders: Headers,
   preferredEstablishmentId?: string | null,
 ): Promise<ManagementContext | null> {
+  if (isDevelopmentAuthBypassEnabled()) {
+    if (
+      !isDevelopmentOrganizationAdminBypassEnabled() &&
+      !isDevelopmentPlatformAdminBypassEnabled()
+    ) {
+      return null;
+    }
+
+    await ensureDevelopmentAuthUser();
+    const accounts = await db
+      .select()
+      .from(user)
+      .where(eq(user.id, DEVELOPMENT_AUTH_USER.id))
+      .limit(1);
+    const account = accounts[0];
+    if (!account) return null;
+
+    const platformAdmin = isDevelopmentPlatformAdminBypassEnabled();
+    if (platformAdmin && preferredEstablishmentId) {
+      const clubs = await db
+        .select({
+          establishmentId: establishment.id,
+          organizationId: establishment.organizationId,
+        })
+        .from(establishment)
+        .where(
+          and(
+            eq(establishment.id, preferredEstablishmentId),
+            eq(establishment.type, "eating_club"),
+          ),
+        )
+        .limit(1);
+      if (!clubs[0]) return null;
+      return {
+        user: account,
+        sessionId: DEVELOPMENT_AUTH_SESSION_ID,
+        platformAdmin: true,
+        establishmentId: clubs[0].establishmentId,
+        organizationId: clubs[0].organizationId,
+        organizationRole: null,
+      };
+    }
+
+    const memberships = isDevelopmentOrganizationAdminBypassEnabled()
+      ? await db
+          .select({
+            establishmentId: establishment.id,
+            organizationId: establishment.organizationId,
+          })
+          .from(member)
+          .innerJoin(
+            establishment,
+            eq(establishment.organizationId, member.organizationId),
+          )
+          .where(
+            preferredEstablishmentId
+              ? and(
+                  eq(member.userId, account.id),
+                  eq(establishment.id, preferredEstablishmentId),
+                )
+              : eq(member.userId, account.id),
+          )
+          .limit(1)
+      : [];
+    const membership = memberships[0];
+
+    return {
+      user: account,
+      sessionId: DEVELOPMENT_AUTH_SESSION_ID,
+      platformAdmin,
+      establishmentId: membership?.establishmentId ?? null,
+      organizationId: membership?.organizationId ?? null,
+      organizationRole: membership ? "admin" : null,
+    };
+  }
+
   const authSession = await auth.api.getSession({ headers: requestHeaders });
   if (!authSession) return null;
 

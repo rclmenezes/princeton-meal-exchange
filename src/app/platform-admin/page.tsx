@@ -218,7 +218,9 @@ export default async function PlatformAdminPage({
                 {accounts.map((account) => {
                   const roster = rosterByUser.get(account.id);
                   const orgRole = membershipByUser.get(account.id);
-                  const protectedAccount = isPlatformAdminEmail(account.email);
+                  const protectedAccount =
+                    account.id === context.user.id ||
+                    isPlatformAdminEmail(account.email);
                   return (
                     <tr key={account.id}>
                       <th scope="row">

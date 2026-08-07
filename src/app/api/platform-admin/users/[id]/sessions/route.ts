@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { user } from "@/db/schema";
+import { session, user } from "@/db/schema";
 import { hasValidMutationOrigin, writeAdminAudit } from "@/lib/admin-audit";
 import { getManagementContext } from "@/lib/admin-authorization";
 import { auth } from "@/lib/auth";
+import { isDevelopmentPlatformAdminBypassEnabled } from "@/lib/auth-context";
 import { isPlatformAdminEmail } from "@/lib/roster-access";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -32,10 +33,14 @@ export async function DELETE(request: Request, context: RouteContext) {
       { status: 403 },
     );
 
-  await auth.api.revokeUserSessions({
-    headers: request.headers,
-    body: { userId: target.id },
-  });
+  if (isDevelopmentPlatformAdminBypassEnabled()) {
+    await db.delete(session).where(eq(session.userId, target.id));
+  } else {
+    await auth.api.revokeUserSessions({
+      headers: request.headers,
+      body: { userId: target.id },
+    });
+  }
   await writeAdminAudit(
     { userId: management.user.id, sessionId: management.sessionId },
     "platform.sessions_revoked",

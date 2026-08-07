@@ -14,6 +14,7 @@
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed:flow5": "node scripts/seed-flow-5.mjs",
     "db:studio": "drizzle-kit studio",
     "auth:generate": "npx auth@1.6.11 generate --config src/lib/auth.ts --output src/db/auth-schema.ts"
   },

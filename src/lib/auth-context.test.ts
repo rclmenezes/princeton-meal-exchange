@@ -36,6 +36,8 @@ import {
   ensureDevelopmentAuthUser,
   getAuthContext,
   isDevelopmentAuthBypassEnabled,
+  isDevelopmentOrganizationAdminBypassEnabled,
+  isDevelopmentPlatformAdminBypassEnabled,
 } from "./auth-context";
 
 describe("development auth bypass", () => {
@@ -60,6 +62,29 @@ describe("development auth bypass", () => {
     expect(isDevelopmentAuthBypassEnabled("test", "true")).toBe(false);
     expect(isDevelopmentAuthBypassEnabled("production", "true")).toBe(false);
     expect(isDevelopmentAuthBypassEnabled("development", "false")).toBe(false);
+  });
+
+  it("requires the base bypass and development mode for admin roles", () => {
+    expect(
+      isDevelopmentOrganizationAdminBypassEnabled(
+        "development",
+        "true",
+        "true",
+      ),
+    ).toBe(true);
+    expect(
+      isDevelopmentPlatformAdminBypassEnabled("development", "true", "true"),
+    ).toBe(true);
+    expect(
+      isDevelopmentOrganizationAdminBypassEnabled(
+        "development",
+        "false",
+        "true",
+      ),
+    ).toBe(false);
+    expect(
+      isDevelopmentPlatformAdminBypassEnabled("production", "true", "true"),
+    ).toBe(false);
   });
 
   it("returns the fixed local identity without calling Better Auth", async () => {

@@ -14,6 +14,11 @@ export function HomeActions({
   if (authBypassed) {
     return (
       <div className="home-actions">
+        {adminHref ? (
+          <Link className="home-checking-link" href={adminHref}>
+            Administration
+          </Link>
+        ) : null}
         <Link className="home-checking-link" href="/meal-checking">
           Meal checking
         </Link>
